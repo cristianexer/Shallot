@@ -39,10 +39,12 @@ enum ShallotSection: String, CaseIterable {
     ///
     /// Browse is the odd one out: its wordmark only shows while the start page
     /// is up, so the always-present omnibar control is the reliable landmark
-    /// and the wordmark is asserted separately.
+    /// and the wordmark is asserted separately. That control is the overflow
+    /// menu — new identity, favourites and the security level moved inside it
+    /// when the chrome was reduced to a single row.
     var landmark: (type: XCUIElement.ElementType, label: String) {
         switch self {
-        case .browse: (.button, "New identity")
+        case .browse: (.button, "More")
         case .favourites: (.staticText, "FAVOURITES")
         case .monitor: (.staticText, "MONITOR")
         case .settings: (.staticText, "SETTINGS")

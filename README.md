@@ -12,7 +12,7 @@ reachable, nothing written to disk but favourites and settings.
   <img src="docs/screenshot-ipad.png" alt="Shallot on iPad: the split-view shell, with the sidebar listing open tabs and their circuits" width="440">
 </p>
 
-<p align="center"><em>Both shells bind to the same view models, so behaviour is identical and only the chrome differs. The circuit shown is a real one; the country codes are resolved on-device from the bundled GeoIP database.</em></p>
+<p align="center"><em>Both shells bind to the same view models, so behaviour is identical and only the chrome differs. One row of chrome, which slides away while you scroll a page and comes back on the way up.</em></p>
 
 ---
 
@@ -325,6 +325,22 @@ and encrypts the connection end to end and almost no onion service listens on
 443, so upgrading one does not add security, it breaks the page. Top-level
 navigation is `NavigationPolicy`'s job, because that is the only place that
 knows about the exemption.
+
+### Chrome
+
+`Features/Browser/OmniBar.swift` is one row: back only when there is somewhere
+to go back to, reload inside the pill, and everything that is not needed on
+every page — new identity, saving a favourite, the security level — behind the
+overflow menu. The leading glyph in the pill is the connection's security when
+Tor is up and its bootstrap progress when it is not, because that is the state
+worth the space.
+
+`BrowserEngine/ChromeVisibilityPolicy.swift` decides when the chrome gets out of
+the way. It is pure arithmetic over the scroll offset — hysteresis so an
+inertial wobble cannot make it flicker, always visible near the top, and never
+hideable on a page shorter than the viewport, because there would be no way to
+scroll back up for it. The engine watches `contentOffset` through KVO rather
+than taking the scroll view's delegate, which WebKit owns.
 
 ### Tor lifecycle
 

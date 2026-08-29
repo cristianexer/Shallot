@@ -1,5 +1,6 @@
 import Domain
 import Foundation
+import UIKit
 import WebKit
 
 /// One tab's web view and everything wired to it.
@@ -24,6 +25,9 @@ public final class TabSession: NSObject {
     private var attemptedUpgrades: Set<URL> = []
     /// What the leak-mitigation script was told to block, for the event log.
     private let mitigations: LeakMitigations.Configuration
+    /// Where the page was the last time we decided to show or hide the chrome.
+    private var lastChromeDecisionOffset: CGFloat = 0
+
     /// True while the web view is showing one of our own error pages.
     ///
     /// An error page is a successful load as far as WebKit is concerned, so
@@ -108,6 +112,8 @@ public final class TabSession: NSObject {
     public func load(_ url: URL) {
         attemptedUpgrades.removeAll()
         isPresentingErrorPage = false
+        lastChromeDecisionOffset = 0
+        engine?.revealChrome()
         let decision = NavigationPolicy.decide(
             NavigationPolicy.Context(
                 url: url,
@@ -197,7 +203,35 @@ public final class TabSession: NSObject {
                     self?.tab?.canGoForward = webView.canGoForward
                 }
             },
+            // Observing the offset rather than becoming the scroll view's
+            // delegate: WebKit sets that delegate itself, and replacing it
+            // breaks zooming and rubber-banding in ways that only show up on
+            // device.
+            webView.scrollView.observe(\.contentOffset, options: [.new]) { [weak self] scrollView, _ in
+                MainActor.assumeIsolated {
+                    self?.updateChromeVisibility(for: scrollView)
+                }
+            },
         ]
+    }
+
+    /// Hides the chrome when the page is scrolled down, brings it back when
+    /// scrolled up or when the top is in reach.
+    ///
+    /// The threshold is what stops it flickering: a few points of rubber-band
+    /// or an inertial wobble must not toggle the whole bar.
+    private func updateChromeVisibility(for scrollView: UIScrollView) {
+        guard let engine else { return }
+        let decision = ChromeVisibilityPolicy.decide(
+            offset: scrollView.contentOffset.y + scrollView.adjustedContentInset.top,
+            anchor: lastChromeDecisionOffset,
+            contentHeight: scrollView.contentSize.height,
+            viewportHeight: scrollView.bounds.height
+        )
+        if let anchor = decision.anchor { lastChromeDecisionOffset = anchor }
+        if let isVisible = decision.isVisible, engine.isChromeVisible != isVisible {
+            engine.isChromeVisible = isVisible
+        }
     }
 
     private func present(_ reason: NavigationBlockReason, for url: URL?) {

@@ -57,11 +57,23 @@ public struct RootShell: View {
             screen
                 // The bar floats over the content, so content has to end above
                 // it rather than behind it.
-                .safeAreaPadding(.bottom, 76)
+                .safeAreaPadding(.bottom, isTabBarVisible ? 76 : 8)
 
             AppTabBar(selection: $model.section)
                 .padding(.bottom, 12)
+                // Slides away with the rest of the chrome while a page is being
+                // scrolled, and comes straight back on the way up.
+                .offset(y: isTabBarVisible ? 0 : 130)
+                .opacity(isTabBarVisible ? 1 : 0)
         }
+        .animation(.easeOut(duration: 0.22), value: isTabBarVisible)
+    }
+
+    /// The tab bar only ever hides on the browser, and only while a page is
+    /// being read — the list screens keep it, because there is nothing there
+    /// worth surrendering the navigation for.
+    private var isTabBarVisible: Bool {
+        model.section != .browser || model.browser.isChromeVisible
     }
 
     // MARK: - Regular (iPad, iPhone landscape)
@@ -174,6 +186,6 @@ public struct RootShell: View {
             return model.torState.canCarryTraffic ? "BUILDING CIRCUIT" : model.torState.label
         }
         let hops = path.map { $0.countryCode ?? "··" }.joined(separator: " → ")
-        return "CIRCUIT ESTABLISHED · \(hops)"
+        return "CIRCUIT · \(hops)"
     }
 }

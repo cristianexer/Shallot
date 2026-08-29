@@ -15,9 +15,9 @@ public struct MonitorView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 ScreenHeader(
-                    kicker: "● Live",
                     title: "MONITOR",
-                    subtitle: "Everything here is measured on this device. Shallot never reports your activity anywhere."
+                    subtitle: "Measured on this device. Shallot never reports your activity anywhere.",
+                    isLive: true
                 )
 
                 CircuitChainView(path: model.path, destination: model.destinationLabel)

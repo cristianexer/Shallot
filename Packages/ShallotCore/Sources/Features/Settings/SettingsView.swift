@@ -18,7 +18,7 @@ public struct SettingsView: View {
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                ScreenHeader(kicker: "Configuration", title: "SETTINGS")
+                ScreenHeader(title: "SETTINGS")
 
                 if model.needsRelaunchForBridges {
                     AdvisoryBox(
@@ -31,6 +31,7 @@ public struct SettingsView: View {
                 securitySection
                 connectionSection
                 privacySection
+                leakSection
                 exceptionsSection
                 lockSection
                 honesty
@@ -47,7 +48,7 @@ public struct SettingsView: View {
 
     private var securitySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Security level").sectionLabelStyle()
+            SectionLabel("Security level")
             SecurityLevelPicker(
                 selection: Binding(
                     get: { model.settings.securityLevel },
@@ -55,12 +56,12 @@ public struct SettingsView: View {
                 )
             )
         }
-        .padding(.bottom, 22)
+        .padding(.bottom, 18)
     }
 
     private var connectionSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Connection").sectionLabelStyle()
+            SectionLabel("Connection")
             SettingsGroup {
                 SettingsRow("Use bridges", detail: "Connect even where Tor is blocked") {
                     Toggle("", isOn: Binding(
@@ -93,17 +94,24 @@ public struct SettingsView: View {
                         }
                         .font(Typography.data)
                         .foregroundStyle(Palette.arterialSoft)
-                        .frame(minHeight: Metrics.minimumTouchTarget)
+                        .frame(minHeight: Metrics.minimumTouchTarget, alignment: .trailing)
+                        .contentShape(Rectangle())
                     }
                     .accessibilityLabel("Transport")
                     .accessibilityValue(model.settings.bridges.transport.title)
                 }
                 RowDivider()
                 SettingsRow("Bridge lines", detail: bridgeCountDetail) {
-                    Button("Edit") { model.isEditingBridges = true }
-                        .font(Typography.data)
-                        .foregroundStyle(Palette.arterialSoft)
-                        .frame(minHeight: Metrics.minimumTouchTarget)
+                    Button {
+                        model.isEditingBridges = true
+                    } label: {
+                        Text("Edit")
+                            .font(Typography.data)
+                            .frame(minWidth: Metrics.minimumTouchTarget, minHeight: Metrics.minimumTouchTarget, alignment: .trailing)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Palette.arterialSoft)
                 }
                 RowDivider()
                 SettingsRow("Default search") {
@@ -118,98 +126,103 @@ public struct SettingsView: View {
                         }
                         .font(Typography.data)
                         .foregroundStyle(Palette.arterialSoft)
-                        .frame(minHeight: Metrics.minimumTouchTarget)
+                        .frame(minHeight: Metrics.minimumTouchTarget, alignment: .trailing)
+                        .contentShape(Rectangle())
                     }
                     .accessibilityLabel("Default search engine")
                     .accessibilityValue(model.settings.searchEngine.title)
                 }
             }
         }
-        .padding(.bottom, 22)
+        .padding(.bottom, 18)
     }
 
     private var privacySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Privacy").sectionLabelStyle()
+            SectionLabel("Browsing")
             SettingsGroup {
-                toggleRow(
-                    "HTTPS-only mode",
-                    detail: "Upgrades or blocks anything that is not encrypted",
-                    isOn: model.settings.httpsOnly,
-                    set: model.setHTTPSOnly
-                )
-                RowDivider()
-                toggleRow(
-                    "Block WebRTC",
-                    detail: "Stops the classic real-IP leak",
-                    isOn: model.settings.blockWebRTC,
-                    set: model.setBlockWebRTC
-                )
-                RowDivider()
-                toggleRow(
-                    "Block WebAuthn",
-                    detail: "Passkey requests can reach the network outside Tor with no interaction",
-                    isOn: model.settings.blockWebAuthn,
-                    set: model.setBlockWebAuthn
-                )
-                RowDivider()
-                toggleRow(
-                    "Block WebTransport",
-                    detail: "Opens direct connections that ignore the proxy",
-                    isOn: model.settings.blockWebTransport,
-                    set: model.setBlockWebTransport
-                )
-                RowDivider()
-                toggleRow(
-                    "Block DNS prefetching",
-                    detail: "Prefetch hints are resolved outside Tor",
-                    isOn: model.settings.blockDNSPrefetch,
-                    set: model.setBlockDNSPrefetch
-                )
+                toggleRow("HTTPS-only mode", isOn: model.settings.httpsOnly, set: model.setHTTPSOnly)
                 RowDivider()
                 toggleRow(
                     "Isolate circuit per tab",
-                    detail: "Each tab uses its own Tor path",
+                    detail: "Each tab gets its own Tor path",
                     isOn: model.settings.isolateCircuitPerTab,
                     set: model.setIsolateCircuitPerTab
                 )
                 RowDivider()
                 toggleRow(
                     "Clear everything on exit",
-                    detail: "Nothing is written to disk either way — this also wipes memory on quit",
                     isOn: model.settings.clearOnExit,
                     set: model.setClearOnExit
                 )
             }
         }
-        .padding(.bottom, 22)
+        .padding(.bottom, 18)
+    }
+
+    /// The four §9 mitigations are one feature, not four preferences, so they
+    /// are explained once and listed as bare switches.
+    private var leakSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionLabel(
+                "Leak protection",
+                note: "These web features can reach the network outside Tor and expose your real address. All are blocked by default."
+            )
+            SettingsGroup {
+                toggleRow("Block WebRTC", isOn: model.settings.blockWebRTC, set: model.setBlockWebRTC)
+                RowDivider()
+                toggleRow("Block WebAuthn", isOn: model.settings.blockWebAuthn, set: model.setBlockWebAuthn)
+                RowDivider()
+                toggleRow(
+                    "Block WebTransport",
+                    isOn: model.settings.blockWebTransport,
+                    set: model.setBlockWebTransport
+                )
+                RowDivider()
+                toggleRow(
+                    "Block DNS prefetching",
+                    isOn: model.settings.blockDNSPrefetch,
+                    set: model.setBlockDNSPrefetch
+                )
+            }
+        }
+        .padding(.bottom, 18)
     }
 
     @ViewBuilder
     private var exceptionsSection: some View {
         if !model.siteExceptions.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Per-site exceptions").sectionLabelStyle()
+                SectionLabel(
+                    "Per-site exceptions",
+                    note: "Sites you have deliberately re-enabled a blocked feature for."
+                )
                 SettingsGroup {
                     ForEach(Array(model.siteExceptions.enumerated()), id: \.element.id) { index, exception in
                         if index > 0 { RowDivider() }
                         SettingsRow(exception.host, detail: "\(exception.feature.title) — \(exception.feature.risk)") {
-                            Button("Revoke") { model.revokeException(exception) }
-                                .font(Typography.data)
-                                .foregroundStyle(Palette.arterialSoft)
-                                .frame(minHeight: Metrics.minimumTouchTarget)
-                                .accessibilityLabel("Revoke \(exception.feature.title) for \(exception.host)")
+                            Button {
+                                model.revokeException(exception)
+                            } label: {
+                                Text("Revoke")
+                                    .font(Typography.data)
+                                    .frame(minWidth: Metrics.minimumTouchTarget, minHeight: Metrics.minimumTouchTarget, alignment: .trailing)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(Palette.arterialSoft)
+                            .accessibilityLabel("Revoke \(exception.feature.title) for \(exception.host)")
                         }
                     }
                 }
             }
-            .padding(.bottom, 22)
+            .padding(.bottom, 18)
         }
     }
 
     private var lockSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Lock").sectionLabelStyle()
+            SectionLabel("Lock")
             SettingsGroup {
                 SettingsRow(
                     "\(biometryName) to open",
@@ -227,13 +240,12 @@ public struct SettingsView: View {
                 RowDivider()
                 toggleRow(
                     "Hide screen in App Switcher",
-                    detail: "Covers the snapshot iOS takes when you leave the app",
                     isOn: model.settings.hideInAppSwitcher,
                     set: model.setHideInAppSwitcher
                 )
             }
         }
-        .padding(.bottom, 22)
+        .padding(.bottom, 18)
     }
 
     private var honesty: some View {
@@ -263,7 +275,7 @@ public struct SettingsView: View {
 
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("About").sectionLabelStyle().padding(.top, 22)
+            SectionLabel("About").padding(.top, 18)
             SettingsGroup {
                 SettingsRow("Version") {
                     Text(model.appVersion)
@@ -296,9 +308,14 @@ public struct SettingsView: View {
         }
     }
 
-    private var transportDetail: String {
+    /// Only worth saying while bridges are actually on — an explanation of an
+    /// unavailable transport is noise on a screen where bridges are off.
+    private var transportDetail: String? {
+        guard model.settings.bridges.isEnabled else { return nil }
         let transport = model.settings.bridges.transport
-        return model.isAvailable(transport) ? transport.detail : model.unavailableReason(for: transport)
+        return model.isAvailable(transport)
+            ? transport.detail
+            : model.unavailableReason(for: transport)
     }
 
     private var bridgeCountDetail: String {

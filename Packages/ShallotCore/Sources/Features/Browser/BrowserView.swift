@@ -2,8 +2,11 @@ import Domain
 import DesignSystem
 import SwiftUI
 
-/// The browser screen: sticky glass omnibar over either the start page or a
-/// real, scrolling web page.
+/// The browser screen: one row of chrome over the page, and nothing else.
+///
+/// The chrome gets out of the way while you read — scrolling down slides the
+/// address bar and the tab bar off screen, scrolling up brings them back — so
+/// a long article gets the whole display.
 public struct BrowserView: View {
     @Bindable var model: BrowserViewModel
     var torState: TorRuntimeState
@@ -15,7 +18,6 @@ public struct BrowserView: View {
     var canRetryConnection: Bool
 
     @State private var isShowingTabs = false
-    @Environment(\.horizontalSizeClass) private var sizeClass
 
     public init(
         model: BrowserViewModel,
@@ -38,80 +40,38 @@ public struct BrowserView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            header
-            content
-        }
-        .sheet(isPresented: $isShowingTabs) {
-            TabOverview(model: model)
-        }
-        .task { await model.onAppear() }
+        content
+            .safeAreaInset(edge: .top, spacing: 0) { header }
+            .sheet(isPresented: $isShowingTabs) { TabOverview(model: model) }
+            .task { await model.onAppear() }
     }
 
     // MARK: - Header
 
     private var header: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 10) {
-                TorStatusChip(label: torState.label, isLive: torState.canCarryTraffic)
-                Spacer(minLength: 8)
-                bookmarkButton
-                tabsButton
-            }
-
-            OmniBar(model: model) {
-                Task { await onNewIdentity() }
-            }
+        OmniBar(
+            model: model,
+            torState: torState,
+            onNewIdentity: { Task { await onNewIdentity() } },
+            onShowTabs: { isShowingTabs = true }
+        )
+        .padding(.horizontal, 12)
+        .padding(.top, 4)
+        .padding(.bottom, 8)
+        // No gradient wash and no material slab behind the bar: the pill is
+        // already glass, and the rain reading through the gap is the whole
+        // visual idea.
+        .background(alignment: .bottom) {
+            Rectangle()
+                .fill(Palette.edge.opacity(model.isChromeVisible ? 0.35 : 0))
+                .frame(height: Metrics.hairline)
         }
-        .padding(.horizontal, Metrics.gutter)
-        .padding(.top, 6)
-        .padding(.bottom, 10)
-        .background {
-            // A soft glass wash so page content refracts as it scrolls under
-            // the bar, matching the prototype.
-            LinearGradient(
-                colors: [Palette.void.opacity(0.72), Palette.void.opacity(0.28), .clear],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .background(.ultraThinMaterial.opacity(0.6))
-            .ignoresSafeArea(edges: .top)
-        }
-    }
-
-    private var bookmarkButton: some View {
-        Button {
-            model.toggleFavourite()
-        } label: {
-            Image(systemName: model.isActivePageSaved ? "bookmark.fill" : "bookmark")
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: Metrics.minimumTouchTarget, height: 30)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(model.isActivePageSaved ? Palette.arterialSoft : Palette.ash)
-        .disabled(model.activeTab?.url == nil)
-        .opacity(model.activeTab?.url == nil ? 0.35 : 1)
-        .accessibilityLabel(model.isActivePageSaved ? "Remove from favourites" : "Save to favourites")
-    }
-
-    private var tabsButton: some View {
-        Button {
-            isShowingTabs = true
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "square.on.square")
-                    .font(.system(size: 12, weight: .medium))
-                Text("\(model.tabs.count)")
-                    .font(Typography.dataSmall)
-            }
-            .frame(minWidth: Metrics.minimumTouchTarget, minHeight: 30)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(Palette.ash)
-        .accessibilityLabel("Tabs")
-        .accessibilityValue("\(model.tabs.count) open")
+        .offset(y: model.isChromeVisible ? 0 : -120)
+        .opacity(model.isChromeVisible ? 1 : 0)
+        .animation(.easeOut(duration: 0.22), value: model.isChromeVisible)
+        // Tapping the sliver of screen the collapsed bar leaves brings it back,
+        // so the chrome is never more than one tap away.
+        .accessibilityElement(children: .contain)
     }
 
     // MARK: - Content
@@ -151,7 +111,7 @@ public struct BrowserView: View {
                     onOpen: { model.open(url: $0.url) },
                     onAdd: onAddFavourite
                 )
-                .padding(.bottom, 120)
+                .padding(.bottom, 110)
             }
             .scrollContentBackground(.hidden)
         }
@@ -182,7 +142,7 @@ struct BootstrapView: View {
     var state: TorRuntimeState
 
     var body: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 16) {
             Spacer()
             Text("CONNECTING TO TOR")
                 .font(Typography.kicker)
@@ -192,7 +152,7 @@ struct BootstrapView: View {
             ProgressView(value: Double(state.progress), total: 100)
                 .progressViewStyle(.linear)
                 .tint(Palette.arterial)
-                .frame(maxWidth: 260)
+                .frame(maxWidth: 240)
 
             Text("\(state.progress)%")
                 .font(Typography.metric)
@@ -200,11 +160,11 @@ struct BootstrapView: View {
                 .monospacedDigit()
                 .contentTransition(.numericText())
 
-            Text("Nothing will load until the circuit is up. That is deliberate — a request sent before Tor is ready would go out over your ordinary connection.")
+            Text("Nothing loads until the circuit is up. A request sent before Tor is ready would go out over your ordinary connection.")
                 .font(Typography.detail)
                 .foregroundStyle(Palette.ash)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 340)
+                .frame(maxWidth: 320)
                 .padding(.horizontal, Metrics.gutter)
             Spacer()
             Spacer()
@@ -226,10 +186,10 @@ struct ConnectionFailedView: View {
     @State private var isRetrying = false
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 14) {
             Spacer()
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 28, weight: .light))
+                .font(.system(size: 26, weight: .light))
                 .foregroundStyle(Palette.arterialSoft)
             Text("Could not connect to Tor")
                 .font(Typography.screenTitle)
@@ -238,7 +198,7 @@ struct ConnectionFailedView: View {
                 .font(Typography.detail)
                 .foregroundStyle(Palette.ash)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 340)
+                .frame(maxWidth: 320)
             Text(reason)
                 .font(Typography.dataSmall)
                 .foregroundStyle(Palette.ash.opacity(0.7))

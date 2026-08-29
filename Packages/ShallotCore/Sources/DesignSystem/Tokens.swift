@@ -21,7 +21,15 @@ public enum Palette {
     /// Primary text.
     public static let bone = Color(red: 0.957, green: 0.914, blue: 0.925)
     /// Secondary text.
-    public static let ash = Color(red: 0.639, green: 0.467, blue: 0.498)
+    ///
+    /// Lifted from the prototype's `#a3777f`: at footnote and caption sizes on
+    /// this background that sat right on the edge of the contrast minimum, and
+    /// the accessibility audit flagged it on every screen. This keeps the same
+    /// dusty hue and clears the bar.
+    public static let ash = Color(red: 0.741, green: 0.596, blue: 0.624)
+
+    /// Dimmer still, for text that is genuinely incidental.
+    public static let ashDim = Color(red: 0.639, green: 0.467, blue: 0.498)
     /// Affirmative state in the event log.
     public static let affirm = Color(red: 0.341, green: 0.851, blue: 0.541)
 

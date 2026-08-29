@@ -23,6 +23,13 @@ public final class BrowserEngine {
         }
     }
 
+    /// Whether the browser chrome should be on screen.
+    ///
+    /// Driven by the direction the page is being scrolled, so reading a long
+    /// article gives the article the whole screen. It lives here rather than in
+    /// a view model because the signal comes from the web view.
+    public var isChromeVisible = true
+
     /// Current user settings. Read on every navigation decision.
     public var settings: AppSettings
 
@@ -132,5 +139,10 @@ public final class BrowserEngine {
     /// Records a security event, if anything is listening.
     public func report(_ event: SecurityEvent) {
         monitor?.record(event)
+    }
+
+    /// Brings the chrome back — after a navigation, or when a tab changes.
+    public func revealChrome() {
+        isChromeVisible = true
     }
 }

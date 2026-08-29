@@ -38,6 +38,11 @@ public struct TabOverview: View {
                             }
                             .padding(14)
                             .foregroundStyle(Palette.arterialSoft)
+                            // Without this the row is only tappable over the
+                            // icon and the words: on iOS 26 the glass
+                            // background is not hit-testable, so the button's
+                            // shape has to be declared before it is applied.
+                            .contentShape(Rectangle())
                             .glassPanel(cornerRadius: Metrics.panelRadius)
                         }
                         .buttonStyle(.plain)

@@ -154,8 +154,36 @@ public struct SettingsRow<Trailing: View>: View {
             trailing
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 13)
+        .padding(.vertical, 11)
         .frame(minHeight: Metrics.minimumTouchTarget)
+    }
+}
+
+/// A section heading, optionally with one line of context for the whole group.
+///
+/// One explanation above four related rows beats four explanations inside
+/// them: the rows stay scannable and the reason is stated once.
+public struct SectionLabel: View {
+    private let title: String
+    private let note: String?
+
+    public init(_ title: String, note: String? = nil) {
+        self.title = title
+        self.note = note
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).sectionLabelStyle()
+            if let note {
+                Text(note)
+                    .font(Typography.detail)
+                    .foregroundStyle(Palette.ash)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 2)
     }
 }
 
@@ -211,7 +239,7 @@ public struct TerminalButton: View {
                 .padding(.vertical, 14)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(emphasis == .solid ? Color.white : Palette.arterialSoft)
+        .foregroundStyle(emphasis == .solid ? Color.white : Palette.bone)
         .background {
             let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
             if emphasis == .solid {

@@ -68,22 +68,18 @@ final class AccessibilityUITests: XCTestCase {
         XCUIAccessibilityAuditType.all.subtracting(excludedTypes)
     }
 
-    /// Two hit-region findings that are known and specific, rather than a whole
-    /// type being waved away.
+    /// Nothing is tolerated by name any more.
     ///
-    /// * "Connected to Tor" is the status chip. It combines its children into a
-    ///   single 13pt-tall readout, and it is not interactive — there is nothing
-    ///   to hit — but the audit measures every SwiftUI accessibility node.
-    /// * "Edit" is the bridge-lines row's button. Its touch target is padded to
-    ///   44pt with `.frame(minHeight:)`, which grows the layout frame without
-    ///   growing the accessibility node, so the audit sees 15.7pt.
-    ///
-    /// Both are reported to the app's owner rather than fixed from here.
+    /// This used to excuse two hit-region findings — the always-on Tor status
+    /// chip, which was a 13pt non-interactive readout, and Settings' "Edit"
+    /// button, whose 44pt target came from a layout frame applied outside the
+    /// button and so never reached its accessibility node. The chip is gone
+    /// with the two-row header and the button now carries its own minimum, so
+    /// both are fixed rather than waved through. Any hit-region finding that
+    /// appears from here is a real one.
     @MainActor
     private func isKnownDesignTradeOff(_ issue: XCUIAccessibilityAuditIssue) -> Bool {
-        guard issue.auditType == .hitRegion else { return false }
-        let label = issue.element?.label ?? ""
-        return label == "Connected to Tor" || label == "Edit"
+        false
     }
 
     // MARK: - Running an audit

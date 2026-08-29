@@ -58,6 +58,13 @@ public final class BrowserViewModel {
         return activeTab.url != nil
     }
 
+    /// Whether the browser chrome is on screen.
+    ///
+    /// Owned by the engine because the page's own scrolling is what moves it.
+    public var isChromeVisible: Bool { engine.isChromeVisible }
+
+    public var securityLevel: SecurityLevel { settings.securityLevel }
+
     public var canGoBack: Bool { activeTab?.canGoBack ?? false }
     public var canGoForward: Bool { activeTab?.canGoForward ?? false }
     public var loadProgress: Double { activeTab?.loadState.progress ?? 0 }
@@ -93,6 +100,7 @@ public final class BrowserViewModel {
 
     public func selectTab(_ id: UUID) {
         session.selectTab(id)
+        engine.revealChrome()
         syncAddressField()
         monitor.destinationLabel = session.activeTab?.url?.host()
         if let tab = session.activeTab {
@@ -201,6 +209,22 @@ public final class BrowserViewModel {
         } else {
             let title = tab.title.isEmpty ? (url.host() ?? url.absoluteString) : tab.title
             try? favourites.add(title: title, url: url)
+        }
+    }
+
+    /// Changes the global security level from the browser, without a trip to
+    /// Settings.
+    ///
+    /// The level someone most wants to change is the one that just broke the
+    /// page in front of them.
+    public func setSecurityLevel(_ level: SecurityLevel) {
+        guard level != settings.securityLevel else { return }
+        settingsStore.update { $0.securityLevel = level }
+        let updated = settingsStore.settings
+        Task {
+            engine.settings = updated
+            await engine.prepareRuleLists()
+            reload()
         }
     }
 

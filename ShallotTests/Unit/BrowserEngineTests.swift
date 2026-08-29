@@ -350,3 +350,80 @@ struct ErrorPageTests {
         }
     }
 }
+
+@Suite("Chrome visibility while scrolling")
+struct ChromeVisibilityPolicyTests {
+    static let tall: CGFloat = 4000
+    static let viewport: CGFloat = 800
+
+    func decide(offset: CGFloat, anchor: CGFloat, contentHeight: CGFloat = tall) -> ChromeVisibilityPolicy.Decision {
+        ChromeVisibilityPolicy.decide(
+            offset: offset,
+            anchor: anchor,
+            contentHeight: contentHeight,
+            viewportHeight: Self.viewport
+        )
+    }
+
+    @Test("Scrolling down past the threshold hides the chrome")
+    func hidesOnScrollDown() {
+        #expect(decide(offset: 400, anchor: 300).isVisible == false)
+    }
+
+    @Test("Scrolling back up shows it again")
+    func showsOnScrollUp() {
+        #expect(decide(offset: 300, anchor: 400).isVisible == true)
+    }
+
+    @Test("Small movements change nothing, so an inertial wobble cannot flicker it")
+    func ignoresSmallMovement() {
+        #expect(decide(offset: 320, anchor: 300) == .unchanged)
+        #expect(decide(offset: 280, anchor: 300) == .unchanged)
+    }
+
+    @Test("Near the top the chrome is always shown")
+    func alwaysVisibleNearTheTop() {
+        #expect(decide(offset: 0, anchor: 900).isVisible == true)
+        #expect(decide(offset: 40, anchor: 900).isVisible == true)
+    }
+
+    @Test("Rubber-banding above the top cannot hide anything")
+    func rubberBanding() {
+        #expect(decide(offset: -120, anchor: 0).isVisible == true)
+    }
+
+    @Test("A page that barely fills the screen keeps its address bar")
+    func shortPagesKeepTheChrome() {
+        // Otherwise there would be no way to scroll back up far enough to get
+        // the address bar back.
+        #expect(decide(offset: 400, anchor: 300, contentHeight: 820).isVisible == true)
+        #expect(decide(offset: 400, anchor: 300, contentHeight: 600).isVisible == true)
+    }
+
+    @Test("Each decision re-anchors, so the next one measures from here")
+    func reanchors() {
+        let decision = decide(offset: 400, anchor: 300)
+        #expect(decision.anchor == 400)
+        // …and a no-op decision leaves the anchor alone.
+        #expect(decide(offset: 320, anchor: 300).anchor == nil)
+    }
+
+    @Test("A long drag down then up returns the chrome exactly once")
+    func fullGesture() {
+        var anchor: CGFloat = 0
+        var visible = true
+        for offset in stride(from: CGFloat(0), through: 1200, by: 40) {
+            let decision = decide(offset: offset, anchor: anchor)
+            if let newAnchor = decision.anchor { anchor = newAnchor }
+            if let isVisible = decision.isVisible { visible = isVisible }
+        }
+        #expect(!visible, "scrolling down the page should have hidden the chrome")
+
+        for offset in stride(from: CGFloat(1200), through: 0, by: -40) {
+            let decision = decide(offset: offset, anchor: anchor)
+            if let newAnchor = decision.anchor { anchor = newAnchor }
+            if let isVisible = decision.isVisible { visible = isVisible }
+        }
+        #expect(visible, "scrolling back up should have brought it back")
+    }
+}

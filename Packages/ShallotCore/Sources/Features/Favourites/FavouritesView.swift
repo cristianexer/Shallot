@@ -16,9 +16,8 @@ public struct FavouritesView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 ScreenHeader(
-                    kicker: "Local · Encrypted",
                     title: "FAVOURITES",
-                    subtitle: "Stored on this device only. No cloud sync — sync is a way to be identified."
+                    subtitle: "On this device only. No cloud sync — sync is a way to be identified."
                 )
 
                 AdvisoryBox(
@@ -208,39 +207,5 @@ public struct FavouritesView: View {
                 }
             }
         }
-    }
-}
-
-/// The sticky glass header used at the top of Favourites, Monitor and Settings.
-public struct ScreenHeader: View {
-    var kicker: String
-    var title: String
-    var subtitle: String?
-
-    public init(kicker: String, title: String, subtitle: String? = nil) {
-        self.kicker = kicker
-        self.title = title
-        self.subtitle = subtitle
-    }
-
-    public var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(kicker).kickerStyle()
-            Text(title)
-                .font(Typography.screenTitle)
-                .tracking(2)
-                .foregroundStyle(Palette.bone)
-                .accessibilityAddTraits(.isHeader)
-            if let subtitle {
-                Text(subtitle)
-                    .font(Typography.detail)
-                    .foregroundStyle(Palette.ash)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 2)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 12)
-        .padding(.bottom, 16)
     }
 }

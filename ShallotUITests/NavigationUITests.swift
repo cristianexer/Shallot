@@ -21,7 +21,7 @@ final class NavigationUITests: XCTestCase {
             app.staticTexts["SHALLOT"].waitForExistence(timeout: Timeout.element),
             "The start page wordmark should be the first thing on screen."
         )
-        XCTAssertTrue(app.buttons["New identity"].exists, "The omnibar should be present on Browse.")
+        XCTAssertTrue(app.buttons["More"].exists, "The omnibar should be present on Browse.")
     }
 
     @MainActor
@@ -66,11 +66,14 @@ final class NavigationUITests: XCTestCase {
             "Quick access should offer the add tile even with nothing saved."
         )
         // The scripted Tor reports itself as connected immediately, so the
-        // status chip should say so rather than sitting in a bootstrap state.
-        // The chip combines its children, so it is not a static text.
+        // start page should show a circuit rather than sit in a bootstrap
+        // state. The summary combines its children, so it is not a static text.
+        let circuit = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "Circuit established"))
+            .firstMatch
         XCTAssertTrue(
-            app.element(.any, labelled: "Connected to Tor").waitForExistence(timeout: Timeout.transition),
-            "The scripted Tor should be reported as connected."
+            circuit.waitForExistence(timeout: Timeout.transition),
+            "The scripted Tor should be reported as connected, with a circuit."
         )
     }
 }
