@@ -16,9 +16,7 @@ public struct RootShell: View {
     }
 
     public var body: some View {
-        ZStack {
-            ShallotBackdrop(isPaused: model.isObscured)
-
+        Group {
             if sizeClass == .compact {
                 compactShell
             } else {
@@ -54,6 +52,8 @@ public struct RootShell: View {
 
     private var compactShell: some View {
         ZStack(alignment: .bottom) {
+            ShallotBackdrop(isPaused: model.isObscured)
+
             screen
                 // The bar floats over the content, so content has to end above
                 // it rather than behind it.
@@ -70,8 +70,14 @@ public struct RootShell: View {
         NavigationSplitView {
             sidebar
         } detail: {
-            screen
-                .background(Color.clear)
+            // The backdrop belongs *inside* the detail pane on this shell.
+            // `NavigationSplitView` paints its own opaque background, so a
+            // backdrop behind the whole split view is simply covered up and
+            // the rain never appears next to the page.
+            ZStack {
+                ShallotBackdrop(isPaused: model.isObscured)
+                screen
+            }
         }
         .navigationSplitViewStyle(.balanced)
     }
