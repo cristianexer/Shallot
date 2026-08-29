@@ -19,7 +19,13 @@ public struct OmniBar: View {
         VStack(spacing: 0) {
             HStack(spacing: 5) {
                 control("chevron.left", label: "Back", enabled: model.canGoBack) { model.goBack() }
-                control("chevron.right", label: "Forward", enabled: model.canGoForward) { model.goForward() }
+                // Shown only when there is somewhere to go: five 44pt controls
+                // leave the address pill too narrow to read on a phone, and a
+                // permanently dimmed chevron is the one that earns its place
+                // least.
+                if model.canGoForward {
+                    control("chevron.right", label: "Forward") { model.goForward() }
+                }
 
                 addressPill
 
@@ -45,7 +51,7 @@ public struct OmniBar: View {
         HStack(spacing: 8) {
             shield
             if model.isEditingAddress {
-                TextField("Search or enter .onion address", text: $model.addressText)
+                TextField("Search or .onion", text: $model.addressText)
                     .font(Typography.address)
                     .foregroundStyle(Palette.bone)
                     .textInputAutocapitalization(.never)
@@ -92,7 +98,7 @@ public struct OmniBar: View {
             .truncationMode(.middle)
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            Text("Search or enter .onion address")
+            Text("Search or .onion")
                 .font(Typography.address)
                 .foregroundStyle(Palette.ash)
                 .lineLimit(1)

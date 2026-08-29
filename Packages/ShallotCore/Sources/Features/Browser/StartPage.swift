@@ -122,9 +122,13 @@ public struct StartPage: View {
             Text(name)
                 .font(.system(.caption2))
                 .foregroundStyle(Palette.ash)
-                .lineLimit(2)
+                // A name with a space wraps onto a second line; a single word
+                // shrinks instead, because SwiftUI's hyphenation would break
+                // "DuckDuckGo" as "Duck-DuckGo", which reads as a different
+                // name. Both paths still scale with Dynamic Type.
+                .lineLimit(name.contains(" ") ? 2 : 1)
                 .multilineTextAlignment(.center)
-                .minimumScaleFactor(0.8)
+                .minimumScaleFactor(0.6)
         }
         .frame(maxWidth: .infinity)
         .padding(8)

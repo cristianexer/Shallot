@@ -84,6 +84,19 @@ public final class MonitorService: MonitorFeeding {
                 if state.canCarryTraffic { await self.refreshCircuits() }
             }
         })
+
+        // The circuit path is shown on the browser's start page as well as on
+        // the Monitor, so it cannot only refresh when the Monitor appears —
+        // otherwise the start page sits on "building circuit" forever. Tor
+        // caches its own answers and resolves each relay's country only once,
+        // so this is a control-channel read, not real work.
+        tasks.append(Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                guard let self else { return }
+                await self.refreshCircuits()
+            }
+        })
     }
 
     public func record(_ event: SecurityEvent) {

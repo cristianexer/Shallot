@@ -61,6 +61,14 @@ var usesSplitViewShell: Bool {
 /// Launches Shallot in its hermetic UI-testing mode and waits for the shell.
 @MainActor
 func launchShallot(file: StaticString = #filePath, line: UInt = #line) -> XCUIApplication {
+    // Orientation is set *before* the launch on purpose. A
+    // `NavigationSplitView(.balanced)` decides its column visibility when the
+    // scene first lays out: a scene born in portrait keeps its sidebar hidden
+    // behind the Show Sidebar button even after the device is turned. Starting
+    // the iPad in landscape gives the permanent sidebar column that the regular
+    // shell is designed around, which is the arrangement worth testing.
+    XCUIDevice.shared.orientation = usesSplitViewShell ? .landscapeLeft : .portrait
+
     let app = XCUIApplication()
     // The one argument that matters: in-memory storage and a scripted Tor.
     app.launchArguments += ["--shallot-ui-testing"]
@@ -72,12 +80,6 @@ func launchShallot(file: StaticString = #filePath, line: UInt = #line) -> XCUIAp
         file: file,
         line: line
     )
-
-    // `NavigationSplitView(.balanced)` only keeps the sidebar on screen as a
-    // permanent column in landscape; in portrait it collapses behind a toggle.
-    // Fixing the orientation per idiom means each shell is exercised in the
-    // arrangement people actually use it in, and keeps navigation a single tap.
-    XCUIDevice.shared.orientation = usesSplitViewShell ? .landscapeLeft : .portrait
 
     XCTAssertTrue(
         app.waitForShell(),
@@ -92,34 +94,40 @@ func launchShallot(file: StaticString = #filePath, line: UInt = #line) -> XCUIAp
 
 extension XCUIApplication {
     /// The tab-bar button (compact) or sidebar row (regular) for `section`.
+    ///
+    /// The compact bar exposes buttons; the sidebar exposes list cells. Both
+    /// carry the same label, so the type is whatever is on screen.
     @MainActor
     func sectionControl(_ section: ShallotSection) -> XCUIElement {
-        let button = buttons[section.rawValue]
-        if button.exists { return button }
-        let cell = cells[section.rawValue]
-        if cell.exists { return cell }
-        // Neither has resolved yet. Hand back whichever this shell will use, so
+        let title = section.rawValue
+        for candidate in [buttons[title], cells[title], staticTexts[title]] where candidate.exists {
+            return candidate
+        }
+        // Nothing has resolved yet. Hand back whichever this shell will use, so
         // the caller can wait on it.
-        return usesSplitViewShell ? cell : button
+        return usesSplitViewShell ? cells[title] : buttons[title]
     }
 
     /// Waits for either shell's section controls to be on screen.
     @MainActor
     func waitForShell(timeout: TimeInterval = Timeout.element) -> Bool {
-        if sectionControl(.browse).waitForExistence(timeout: timeout) { return true }
-        // Belt and braces: if a future iPadOS collapses the sidebar even in
-        // landscape, reveal it rather than failing the whole suite.
+        if sectionControl(.browse).waitForExistence(timeout: Timeout.brief) { return true }
+        // The split view can still start collapsed — a narrower window, or a
+        // different iPadOS default — so ask for the sidebar before giving up.
         revealSidebarIfNeeded()
-        return sectionControl(.browse).waitForExistence(timeout: Timeout.transition)
+        return sectionControl(.browse).waitForExistence(timeout: timeout)
     }
 
     /// Taps the split view's sidebar toggle, if one is on screen.
+    @discardableResult
     @MainActor
-    func revealSidebarIfNeeded() {
-        let toggles = buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar'"))
-        guard toggles.count > 0 else { return }
-        let toggle = toggles.element(boundBy: 0)
-        if toggle.isHittable { toggle.tap() }
+    func revealSidebarIfNeeded() -> Bool {
+        let toggle = buttons
+            .matching(NSPredicate(format: "label CONTAINS[c] 'sidebar'"))
+            .firstMatch
+        guard toggle.waitForExistence(timeout: Timeout.brief), toggle.isHittable else { return false }
+        toggle.tap()
+        return true
     }
 
     /// Moves to `section` and waits for its landmark.
@@ -129,7 +137,13 @@ extension XCUIApplication {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        let control = sectionControl(section)
+        var control = sectionControl(section)
+        if !control.waitForExistence(timeout: Timeout.brief) {
+            // The sidebar may have collapsed itself — for instance after a
+            // rotation, or on a narrower split-view window.
+            revealSidebarIfNeeded()
+            control = sectionControl(section)
+        }
         guard control.waitForExistence(timeout: Timeout.element) else {
             XCTFail("No control for the \(section.rawValue) section.", file: file, line: line)
             return

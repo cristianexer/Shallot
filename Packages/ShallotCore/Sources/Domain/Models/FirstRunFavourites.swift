@@ -14,11 +14,11 @@ extension Favourite {
     public static let firstRunDefaults: [Favourite] = [
         ("DuckDuckGo", "https://duckduckgo.com"),
         ("Tor Project", "https://www.torproject.org"),
-        ("SecureDrop Directory", "https://securedrop.org/directory/"),
+        ("SecureDrop", "https://securedrop.org/directory/"),
         ("ProPublica", "https://www.propublica.org"),
         ("BBC News", "https://www.bbc.co.uk/news"),
         ("Wikipedia", "https://www.wikipedia.org"),
-        ("Internet Archive", "https://archive.org"),
+        ("Archive", "https://archive.org"),
     ]
     .enumerated()
     .compactMap { index, entry in
