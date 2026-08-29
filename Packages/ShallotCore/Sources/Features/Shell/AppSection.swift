@@ -9,6 +9,13 @@ public enum AppSection: String, CaseIterable, Identifiable, Hashable, Sendable {
 
     public var id: String { rawValue }
 
+    /// The three places you go *from* the browser.
+    ///
+    /// The browser is the root of the app on a phone — it is what the app is
+    /// for — so the others are reached from its overflow menu rather than
+    /// competing with it for a bar.
+    public static let destinations: [AppSection] = [.favourites, .monitor, .settings]
+
     /// The sidebar title on iPad. The compact tab bar is icon-only, so these
     /// double as the VoiceOver labels there — which is why they are proper
     /// words rather than abbreviations.

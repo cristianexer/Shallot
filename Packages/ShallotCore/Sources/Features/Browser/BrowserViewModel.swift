@@ -125,6 +125,14 @@ public final class BrowserViewModel {
         }
     }
 
+    /// Refreshes every tab's picture for the overview.
+    ///
+    /// The engine stays private: the overview needs the snapshots, not a
+    /// reference to the thing that takes them.
+    public func captureTabThumbnails() async {
+        await engine.captureThumbnails(for: tabs)
+    }
+
     // MARK: - Navigation
 
     /// Interprets whatever is in the omnibar and acts on it.

@@ -62,8 +62,8 @@ final class NavigationUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["SHALLOT"].waitForExistence(timeout: Timeout.element))
         XCTAssertTrue(
-            app.buttons["Add a favourite"].waitForExistence(timeout: Timeout.transition),
-            "Quick access should offer the add tile even with nothing saved."
+            app.buttons["All favourites"].waitForExistence(timeout: Timeout.transition),
+            "Quick access should offer a way through to the favourites screen."
         )
         // The scripted Tor reports itself as connected immediately, so the
         // start page should show a circuit rather than sit in a bootstrap

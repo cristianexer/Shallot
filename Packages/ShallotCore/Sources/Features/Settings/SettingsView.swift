@@ -63,7 +63,7 @@ public struct SettingsView: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionLabel("Connection")
             SettingsGroup {
-                SettingsRow("Use bridges", detail: "Connect even where Tor is blocked") {
+                SettingsRow("Use bridges", icon: "arrow.triangle.branch", detail: "Connect even where Tor is blocked") {
                     Toggle("", isOn: Binding(
                         get: { model.settings.bridges.isEnabled },
                         set: { model.setBridgesEnabled($0) }
@@ -73,7 +73,7 @@ public struct SettingsView: View {
                     .accessibilityLabel("Use bridges")
                 }
                 RowDivider()
-                SettingsRow("Transport", detail: transportDetail) {
+                SettingsRow("Transport", icon: "shippingbox", detail: transportDetail) {
                     Menu {
                         ForEach(BridgeTransport.allCases) { transport in
                             Button {
@@ -101,7 +101,7 @@ public struct SettingsView: View {
                     .accessibilityValue(model.settings.bridges.transport.title)
                 }
                 RowDivider()
-                SettingsRow("Bridge lines", detail: bridgeCountDetail) {
+                SettingsRow("Bridge lines", icon: "text.alignleft", detail: bridgeCountDetail) {
                     Button {
                         model.isEditingBridges = true
                     } label: {
@@ -114,7 +114,7 @@ public struct SettingsView: View {
                     .foregroundStyle(Palette.arterialSoft)
                 }
                 RowDivider()
-                SettingsRow("Default search") {
+                SettingsRow("Default search", icon: "magnifyingglass") {
                     Menu {
                         ForEach(SearchEngine.allCases) { engine in
                             Button(engine.title) { model.setSearchEngine(engine) }
@@ -141,10 +141,11 @@ public struct SettingsView: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionLabel("Browsing")
             SettingsGroup {
-                toggleRow("HTTPS-only mode", isOn: model.settings.httpsOnly, set: model.setHTTPSOnly)
+                toggleRow("HTTPS-only mode", icon: "lock", isOn: model.settings.httpsOnly, set: model.setHTTPSOnly)
                 RowDivider()
                 toggleRow(
                     "Isolate circuit per tab",
+                    icon: "point.3.filled.connected.trianglepath.dotted",
                     detail: "Each tab gets its own Tor path",
                     isOn: model.settings.isolateCircuitPerTab,
                     set: model.setIsolateCircuitPerTab
@@ -152,6 +153,7 @@ public struct SettingsView: View {
                 RowDivider()
                 toggleRow(
                     "Clear everything on exit",
+                    icon: "trash",
                     isOn: model.settings.clearOnExit,
                     set: model.setClearOnExit
                 )
@@ -169,18 +171,20 @@ public struct SettingsView: View {
                 note: "These web features can reach the network outside Tor and expose your real address. All are blocked by default."
             )
             SettingsGroup {
-                toggleRow("Block WebRTC", isOn: model.settings.blockWebRTC, set: model.setBlockWebRTC)
+                toggleRow("Block WebRTC", icon: "video.slash", isOn: model.settings.blockWebRTC, set: model.setBlockWebRTC)
                 RowDivider()
-                toggleRow("Block WebAuthn", isOn: model.settings.blockWebAuthn, set: model.setBlockWebAuthn)
+                toggleRow("Block WebAuthn", icon: "key.slash", isOn: model.settings.blockWebAuthn, set: model.setBlockWebAuthn)
                 RowDivider()
                 toggleRow(
                     "Block WebTransport",
+                    icon: "bolt.horizontal.circle",
                     isOn: model.settings.blockWebTransport,
                     set: model.setBlockWebTransport
                 )
                 RowDivider()
                 toggleRow(
                     "Block DNS prefetching",
+                    icon: "network.slash",
                     isOn: model.settings.blockDNSPrefetch,
                     set: model.setBlockDNSPrefetch
                 )
@@ -200,7 +204,11 @@ public struct SettingsView: View {
                 SettingsGroup {
                     ForEach(Array(model.siteExceptions.enumerated()), id: \.element.id) { index, exception in
                         if index > 0 { RowDivider() }
-                        SettingsRow(exception.host, detail: "\(exception.feature.title) — \(exception.feature.risk)") {
+                        SettingsRow(
+                            exception.host,
+                            icon: "exclamationmark.shield",
+                            detail: "\(exception.feature.title) — \(exception.feature.risk)"
+                        ) {
                             Button {
                                 model.revokeException(exception)
                             } label: {
@@ -226,6 +234,7 @@ public struct SettingsView: View {
             SettingsGroup {
                 SettingsRow(
                     "\(biometryName) to open",
+                    icon: "faceid",
                     detail: isBiometryAvailable ? nil : "Set a device passcode to use the app lock"
                 ) {
                     Toggle("", isOn: Binding(
@@ -240,6 +249,7 @@ public struct SettingsView: View {
                 RowDivider()
                 toggleRow(
                     "Hide screen in App Switcher",
+                    icon: "eye.slash",
                     isOn: model.settings.hideInAppSwitcher,
                     set: model.setHideInAppSwitcher
                 )
@@ -277,13 +287,13 @@ public struct SettingsView: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionLabel("About").padding(.top, 18)
             SettingsGroup {
-                SettingsRow("Version") {
+                SettingsRow("Version", icon: "number") {
                     Text(model.appVersion)
                         .font(Typography.data)
                         .foregroundStyle(Palette.arterialSoft)
                 }
                 RowDivider()
-                SettingsRow("Tor") {
+                SettingsRow("Tor", icon: "circle.hexagongrid") {
                     Text(model.torVersion)
                         .font(Typography.data)
                         .foregroundStyle(Palette.arterialSoft)
@@ -296,11 +306,12 @@ public struct SettingsView: View {
 
     private func toggleRow(
         _ title: String,
+        icon: String? = nil,
         detail: String? = nil,
         isOn: Bool,
         set: @escaping (Bool) -> Void
     ) -> some View {
-        SettingsRow(title, detail: detail) {
+        SettingsRow(title, icon: icon, detail: detail) {
             Toggle("", isOn: Binding(get: { isOn }, set: set))
                 .labelsHidden()
                 .tint(Palette.arterial)

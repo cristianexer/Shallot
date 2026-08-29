@@ -129,16 +129,32 @@ public struct AdvisoryBox: View {
 public struct SettingsRow<Trailing: View>: View {
     private let title: String
     private let detail: String?
+    private let icon: String?
     private let trailing: Trailing
 
-    public init(_ title: String, detail: String? = nil, @ViewBuilder trailing: () -> Trailing) {
+    public init(
+        _ title: String,
+        icon: String? = nil,
+        detail: String? = nil,
+        @ViewBuilder trailing: () -> Trailing
+    ) {
         self.title = title
+        self.icon = icon
         self.detail = detail
         self.trailing = trailing()
     }
 
     public var body: some View {
         HStack(alignment: .center, spacing: 12) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(Palette.arterialSoft)
+                    // A fixed width keeps every label on the same left edge,
+                    // whichever glyph a row happens to use.
+                    .frame(width: 22, alignment: .center)
+                    .accessibilityHidden(true)
+            }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(Typography.rowTitle)

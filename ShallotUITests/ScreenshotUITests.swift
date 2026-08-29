@@ -31,7 +31,7 @@ final class ScreenshotUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Tabs"].waitForNonExistence(timeout: Timeout.transition))
 
         app.show(.favourites)
-        app.buttons["Add a favourite"].tap()
+        app.buttons["New favourite"].tap()
         XCTAssertTrue(app.navigationBars["New favourite"].waitForExistence(timeout: Timeout.transition))
         attach(app.screenshot(), named: "\(shellName) — New favourite")
         app.buttons["Cancel"].tap()

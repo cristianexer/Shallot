@@ -37,9 +37,52 @@ public struct StartPage: View {
     public var body: some View {
         VStack(spacing: 0) {
             hero
-            grid
+            if favourites.isEmpty {
+                emptyQuickAccess
+            } else {
+                grid
+            }
         }
         .padding(.horizontal, Metrics.gutter)
+    }
+
+    /// What the start page says before anything has been saved.
+    ///
+    /// A grid holding nothing but its own "add" tile reads as a page that
+    /// failed to load. This says what the space is for and offers the one
+    /// action that fills it.
+    private var emptyQuickAccess: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "bookmark")
+                .font(.system(size: 20, weight: .light))
+                .foregroundStyle(Palette.arterialSoft)
+            Text("Nothing saved yet")
+                .font(Typography.body)
+                .foregroundStyle(Palette.bone)
+            Text("Save a page with the bookmark button below, or add an address by hand.")
+                .font(Typography.detail)
+                .foregroundStyle(Palette.ash)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button(action: onAdd) {
+                Text("FAVOURITES")
+                    .font(Typography.control)
+                    .tracking(1.4)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 11)
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Palette.arterialSoft)
+            .glassCapsule()
+            .frame(minHeight: Metrics.minimumTouchTarget)
+            .padding(.top, 4)
+            .accessibilityLabel("All favourites")
+            .accessibilityHint("Open your saved sites to add or manage them")
+        }
+        .frame(maxWidth: 320)
+        .padding(.vertical, 28)
     }
 
     private var hero: some View {
@@ -96,13 +139,15 @@ public struct StartPage: View {
                 .buttonStyle(TileButtonStyle())
                 .accessibilityLabel(favourite.title)
                 .accessibilityHint("Opens \(favourite.displayURL) over Tor")
+                .accessibilityIdentifier("quick-access-\(favourite.title)")
             }
 
             Button(action: onAdd) {
-                tile(monogram: "+", name: "Add", isAdd: true)
+                tile(monogram: "+", name: "Favourites", isAdd: true)
             }
             .buttonStyle(TileButtonStyle())
-            .accessibilityLabel("Add a favourite")
+            .accessibilityLabel("All favourites")
+            .accessibilityHint("Open your saved sites to add or manage them")
         }
     }
 

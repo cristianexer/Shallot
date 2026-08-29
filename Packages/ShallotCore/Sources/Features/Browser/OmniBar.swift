@@ -4,11 +4,10 @@ import SwiftUI
 
 /// The address bar. One row, and as little of it as the job allows.
 ///
-/// The controls that used to sit around it have been folded inward: reload
-/// lives inside the pill, the Tor status is the dot on its leading edge, and
-/// everything that is not needed on every page — new identity, saving a
-/// favourite, the security level — is behind the overflow menu. Back appears
-/// only when there is somewhere to go back to.
+/// The overflow menu on the left, the address in the middle, reload on the
+/// right. Back, forward, saving a page and the tab list live in the bottom bar,
+/// which is where a thumb is; the Tor status is the glyph on the pill's leading
+/// edge rather than a banner of its own.
 ///
 /// The result is that the address gets most of the width, which is the one
 /// thing in this bar a person actually reads.
@@ -16,7 +15,7 @@ public struct OmniBar: View {
     @Bindable var model: BrowserViewModel
     var torState: TorRuntimeState
     var onNewIdentity: () -> Void
-    var onShowTabs: () -> Void
+    var onShowSection: (AppSection) -> Void
 
     @FocusState private var isFieldFocused: Bool
 
@@ -24,27 +23,21 @@ public struct OmniBar: View {
         model: BrowserViewModel,
         torState: TorRuntimeState,
         onNewIdentity: @escaping () -> Void,
-        onShowTabs: @escaping () -> Void
+        onShowSection: @escaping (AppSection) -> Void
     ) {
         self.model = model
         self.torState = torState
         self.onNewIdentity = onNewIdentity
-        self.onShowTabs = onShowTabs
+        self.onShowSection = onShowSection
     }
 
     public var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {
                 SidebarToggleButton()
-
-                if model.canGoBack {
-                    control("chevron.left", label: "Back") { model.goBack() }
-                }
-
-                addressPill
-
-                tabsButton
                 overflowMenu
+                addressPill
+                refreshButton
             }
 
             progressLine
@@ -71,11 +64,9 @@ public struct OmniBar: View {
             } else {
                 addressText
             }
-
-            trailingAction
         }
         .padding(.leading, 10)
-        .padding(.trailing, 4)
+        .padding(.trailing, 10)
         .padding(.vertical, 5)
         .frame(maxWidth: .infinity, minHeight: 38)
         .glassPanel(cornerRadius: Metrics.pillRadius, density: .bar)
@@ -144,53 +135,37 @@ public struct OmniBar: View {
         }
     }
 
-    /// Reload and stop live inside the pill, where they cost no extra width.
-    @ViewBuilder
-    private var trailingAction: some View {
-        if model.isLoading {
-            pillButton("xmark", label: "Stop loading") { model.stopLoading() }
-        } else if model.activeTab?.url != nil {
-            pillButton("arrow.clockwise", label: "Reload") { model.reload() }
-        }
-    }
-
     // MARK: - Outer controls
 
-    private var tabsButton: some View {
-        Button(action: onShowTabs) {
-            ZStack {
-                Image(systemName: "square.on.square")
-                    .font(.system(size: 15, weight: .light))
-                Text("\(model.tabs.count)")
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                    .offset(x: 1, y: 1)
+    /// Reload, as its own control rather than a glyph tucked inside the pill.
+    ///
+    /// It doubles as stop while a page is loading, which is the one moment the
+    /// two are never both wanted.
+    @ViewBuilder
+    private var refreshButton: some View {
+        if model.isLoading {
+            control("xmark", label: "Stop loading") { model.stopLoading() }
+        } else {
+            control("arrow.clockwise", label: "Reload", enabled: model.activeTab?.url != nil) {
+                model.reload()
             }
-            .frame(width: 38, height: 38)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(Palette.ash)
-        .frame(minWidth: Metrics.minimumTouchTarget, minHeight: Metrics.minimumTouchTarget)
-        .accessibilityLabel("Tabs")
-        .accessibilityValue("\(model.tabs.count) open")
     }
 
     private var overflowMenu: some View {
         Menu {
-            Button(role: .destructive, action: onNewIdentity) {
-                Label("New Identity", systemImage: "theatermasks")
-            }
-
-            if model.activeTab?.url != nil {
+            // The three destinations. They live here rather than in a bottom
+            // bar because they are places you visit occasionally, and the bar
+            // is better spent on the controls a browser needs constantly.
+            ForEach(AppSection.destinations) { section in
                 Button {
-                    model.toggleFavourite()
+                    onShowSection(section)
                 } label: {
-                    Label(
-                        model.isActivePageSaved ? "Remove from Favourites" : "Save to Favourites",
-                        systemImage: model.isActivePageSaved ? "bookmark.fill" : "bookmark"
-                    )
+                    Label(section.title, systemImage: section.symbol)
                 }
             }
+
+            Divider()
 
             Button {
                 model.newTab()
@@ -198,13 +173,8 @@ public struct OmniBar: View {
                 Label("New Tab", systemImage: "plus.square")
             }
 
-            // The level a person most wants to change is the one that just
-            // broke the page in front of them, so it belongs here rather than
-            // three taps away in Settings.
-            Picker("Security level", selection: securityLevelBinding) {
-                ForEach(SecurityLevel.allCases) { level in
-                    Text(level.title.capitalized).tag(level)
-                }
+            Button(role: .destructive, action: onNewIdentity) {
+                Label("New Identity", systemImage: "theatermasks")
             }
         } label: {
             Image(systemName: "ellipsis")
@@ -215,14 +185,7 @@ public struct OmniBar: View {
         .foregroundStyle(Palette.arterialSoft)
         .frame(minWidth: Metrics.minimumTouchTarget, minHeight: Metrics.minimumTouchTarget)
         .accessibilityLabel("More")
-        .accessibilityHint("New identity, favourites, tabs and security level")
-    }
-
-    private var securityLevelBinding: Binding<SecurityLevel> {
-        Binding(
-            get: { model.securityLevel },
-            set: { model.setSecurityLevel($0) }
-        )
+        .accessibilityHint("Favourites, Monitor, Settings, a new tab and a new identity")
     }
 
     // MARK: - Progress
@@ -253,34 +216,20 @@ public struct OmniBar: View {
     private func control(
         _ symbol: String,
         label: String,
+        enabled: Bool = true,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 14, weight: .medium))
-                .frame(width: 32, height: 38)
+                .font(.system(size: 15, weight: .medium))
+                .frame(width: 34, height: 38)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .foregroundStyle(Palette.ash)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.3)
         .frame(minWidth: Metrics.minimumTouchTarget, minHeight: Metrics.minimumTouchTarget)
-        .accessibilityLabel(label)
-    }
-
-    /// A control sized to sit inside the pill without stretching it.
-    private func pillButton(
-        _ symbol: String,
-        label: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 12, weight: .medium))
-                .frame(width: 28, height: 28)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(Palette.ash)
         .accessibilityLabel(label)
     }
 

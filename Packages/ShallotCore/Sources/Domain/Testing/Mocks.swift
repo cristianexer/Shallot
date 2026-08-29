@@ -54,6 +54,10 @@ public actor MockTorService: TorServicing {
         case .immediate:
             transition(to: .starting(progress: 0))
             transition(to: .running)
+            // The real service publishes 100 when it finishes; a double that
+            // stays silent leaves every progress readout showing zero while
+            // claiming to be connected.
+            progress.yield(100)
         case .gradual(let steps):
             for step in steps {
                 transition(to: .starting(progress: step))
@@ -209,7 +213,6 @@ public final class InMemoryFavouritesRepository: FavouritesRepository {
 public final class InMemorySettingsStore: SettingsStoring {
     public private(set) var settings: AppSettings
     public private(set) var needsRelaunchForBridges = false
-    public private(set) var hasSeededDefaults = false
 
     private var appliedBridges: BridgeConfig
 
@@ -228,10 +231,6 @@ public final class InMemorySettingsStore: SettingsStoring {
     public func markBridgesApplied() {
         appliedBridges = settings.bridges
         needsRelaunchForBridges = false
-    }
-
-    public func markDefaultsSeeded() {
-        hasSeededDefaults = true
     }
 }
 

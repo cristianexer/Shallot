@@ -102,21 +102,6 @@ final class AppContainer {
         if let warning {
             monitor.record(SecurityEvent(kind: .failure, message: warning))
         }
-
-        seedFirstRunFavourites()
-    }
-
-    /// Offers a starting set of favourites, once.
-    ///
-    /// Guarded by a persisted flag rather than by "the list is empty", so a user
-    /// who clears their favourites does not find them back at the next launch.
-    private func seedFirstRunFavourites() {
-        guard !settings.hasSeededDefaults else { return }
-        settings.markDefaultsSeeded()
-        guard favourites.favourites.isEmpty else { return }
-        for favourite in Favourite.firstRunDefaults {
-            try? favourites.add(title: favourite.title, url: favourite.url)
-        }
     }
 
     private static func liveTorConfiguration(bridges: BridgeConfig) -> TorService.Configuration {

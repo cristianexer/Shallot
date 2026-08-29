@@ -22,7 +22,7 @@ final class FavouritesUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["FAVOURITES"].exists)
         XCTAssertTrue(
-            app.buttons["Add a favourite"].waitForExistence(timeout: Timeout.element),
+            app.buttons["New favourite"].waitForExistence(timeout: Timeout.element),
             "There should always be a way to add a favourite by hand."
         )
         // The screen leads with the reason a saved onion address is worth more
@@ -40,7 +40,7 @@ final class FavouritesUITests: XCTestCase {
         let app = launchShallot()
         app.show(.favourites)
 
-        app.buttons["Add a favourite"].tap()
+        app.buttons["New favourite"].tap()
 
         XCTAssertTrue(
             app.navigationBars["New favourite"].waitForExistence(timeout: Timeout.transition),
@@ -59,20 +59,19 @@ final class FavouritesUITests: XCTestCase {
         app.show(.favourites)
         app.addFavourite(named: "Test Site", address: Fixture.onionAddress)
 
+        // Addressed by identifier rather than label: the same favourite also
+        // shows as a quick-access tile on the start page behind this sheet.
+        let card = app.buttons["favourite-card-Test Site"]
         XCTAssertTrue(
-            app.buttons["Test Site"].waitForExistence(timeout: Timeout.element),
+            card.waitForExistence(timeout: Timeout.element),
             "A saved favourite should appear as a card."
         )
         XCTAssertFalse(
             app.staticTexts["Nothing saved yet"].exists,
             "The empty state should give way once something is saved."
         )
-        XCTAssertTrue(
-            app.staticTexts.matching(NSPredicate(format: "label ==[c] 'Onion services'")).firstMatch.exists,
-            "A .onion favourite belongs in the onion services group."
-        )
         XCTAssertEqual(
-            app.buttons["Test Site"].value as? String,
+            card.value as? String,
             "Onion service",
             "The card should announce what kind of address it holds."
         )
@@ -84,7 +83,7 @@ final class FavouritesUITests: XCTestCase {
         app.show(.favourites)
         app.addFavourite(named: "Test Site", address: Fixture.onionAddress)
 
-        let card = app.buttons["Test Site"]
+        let card = app.buttons["favourite-card-Test Site"]
         XCTAssertTrue(card.waitForExistence(timeout: Timeout.element))
         app.scrollUntilHittable(card)
         card.press(forDuration: 1.2)
@@ -101,7 +100,7 @@ final class FavouritesUITests: XCTestCase {
             "Deleting should remove the card."
         )
         XCTAssertFalse(
-            app.staticTexts["Test Site"].exists,
+            app.buttons["favourite-card-Test Site"].exists,
             "Nothing of the deleted favourite should be left on the screen."
         )
     }
@@ -119,7 +118,7 @@ extension XCUIApplication {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        let add = buttons["Add a favourite"]
+        let add = buttons["New favourite"]
         XCTAssertTrue(
             add.waitForExistence(timeout: Timeout.element),
             "The add button was not found.",

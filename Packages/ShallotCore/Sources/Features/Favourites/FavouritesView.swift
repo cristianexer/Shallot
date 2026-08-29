@@ -15,10 +15,13 @@ public struct FavouritesView: View {
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                ScreenHeader(
-                    title: "FAVOURITES",
-                    subtitle: "On this device only. No cloud sync — sync is a way to be identified."
-                )
+                HStack(alignment: .firstTextBaseline) {
+                    ScreenHeader(
+                        title: "FAVOURITES",
+                        subtitle: "On this device only. No cloud sync — sync is a way to be identified."
+                    )
+                    addButton
+                }
 
                 AdvisoryBox(
                     title: "Verify before trusting",
@@ -29,11 +32,10 @@ public struct FavouritesView: View {
                 if model.isEmpty {
                     emptyState
                 } else {
-                    if !model.onionFavourites.isEmpty {
-                        section("Onion services", items: model.onionFavourites)
-                    }
-                    if !model.clearnetFavourites.isEmpty {
-                        section("Clearnet", items: model.clearnetFavourites)
+                    LazyVGrid(columns: columns, spacing: Metrics.tightGutter) {
+                        ForEach(model.favourites) { favourite in
+                            card(for: favourite)
+                        }
                     }
                 }
             }
@@ -41,7 +43,6 @@ public struct FavouritesView: View {
             .padding(.bottom, 120)
         }
         .scrollContentBackground(.hidden)
-        .overlay(alignment: .bottomTrailing) { addButton }
         .sheet(isPresented: $model.isAdding) { addSheet }
         .alert(
             "Rename favourite",
@@ -59,21 +60,6 @@ public struct FavouritesView: View {
         } message: {
             Text(model.errorMessage ?? "")
         }
-    }
-
-    private func section(_ title: String, items: [Favourite]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .sectionLabelStyle()
-                .padding(.top, 10)
-
-            LazyVGrid(columns: columns, spacing: Metrics.tightGutter) {
-                ForEach(items) { favourite in
-                    card(for: favourite)
-                }
-            }
-        }
-        .padding(.bottom, 10)
     }
 
     private var columns: [GridItem] {
@@ -117,6 +103,10 @@ public struct FavouritesView: View {
         .accessibilityLabel(favourite.title)
         .accessibilityValue(favourite.isOnion ? "Onion service" : "Standard website")
         .accessibilityHint("Opens over Tor. Long press to rename or delete.")
+        // The same favourite also appears as a quick-access tile on the start
+        // page behind this sheet, and both carry its title as their label. The
+        // identifier is what tells them apart for automation.
+        .accessibilityIdentifier("favourite-card-\(favourite.title)")
     }
 
     private var emptyState: some View {
@@ -127,7 +117,7 @@ public struct FavouritesView: View {
             Text("Nothing saved yet")
                 .font(Typography.body)
                 .foregroundStyle(Palette.bone)
-            Text("Save a page from the browser, or add an address by hand.")
+            Text("Save a page from the browser with the bookmark button, or add an address by hand.")
                 .font(Typography.detail)
                 .foregroundStyle(Palette.ash)
                 .multilineTextAlignment(.center)
@@ -136,30 +126,24 @@ public struct FavouritesView: View {
         .padding(.vertical, 48)
     }
 
+    /// Adding sits at the top, beside the title.
+    ///
+    /// It used to be a floating button in the bottom corner, which on a phone
+    /// is where the browsing controls now live and where a list this short
+    /// never reaches.
     private var addButton: some View {
         Button {
             model.beginAdding()
         } label: {
             Image(systemName: "plus")
-                .font(.system(size: 17, weight: .semibold))
-                .frame(width: 52, height: 52)
+                .font(.system(size: 16, weight: .semibold))
+                .frame(width: 38, height: 38)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(Palette.bone)
-        .background {
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [Palette.arterial, Color(red: 0.639, green: 0, blue: 0.125)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: Palette.glow, radius: 14, y: 6)
-        }
-        .padding(.trailing, Metrics.gutter)
-        .padding(.bottom, 96)
-        .accessibilityLabel("Add a favourite")
+        .foregroundStyle(Palette.arterialSoft)
+        .frame(minWidth: Metrics.minimumTouchTarget, minHeight: Metrics.minimumTouchTarget)
+        .accessibilityLabel("New favourite")
     }
 
     private var addSheet: some View {

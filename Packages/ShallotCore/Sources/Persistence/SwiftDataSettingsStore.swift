@@ -9,7 +9,6 @@ import SwiftData
 public final class SwiftDataSettingsStore: SettingsStoring {
     public private(set) var settings: AppSettings = .default
     public private(set) var needsRelaunchForBridges = false
-    public private(set) var hasSeededDefaults = false
 
     @ObservationIgnored private let context: ModelContext
     @ObservationIgnored private var appliedBridges: BridgeConfig = .disabled
@@ -29,7 +28,6 @@ public final class SwiftDataSettingsStore: SettingsStoring {
         settings = record.decoded()
         appliedBridges = record.decodedAppliedBridges() ?? settings.bridges
         needsRelaunchForBridges = settings.bridges != appliedBridges
-        hasSeededDefaults = record.hasSeededDefaults
     }
 
     public func update(_ mutate: (inout AppSettings) -> Void) {
@@ -41,11 +39,6 @@ public final class SwiftDataSettingsStore: SettingsStoring {
     public func markBridgesApplied() {
         appliedBridges = settings.bridges
         needsRelaunchForBridges = false
-        persist()
-    }
-
-    public func markDefaultsSeeded() {
-        hasSeededDefaults = true
         persist()
     }
 
@@ -61,13 +54,11 @@ public final class SwiftDataSettingsStore: SettingsStoring {
         if let record = fetchRecord() {
             record.payload = payload
             record.appliedBridgePayload = appliedPayload
-            record.hasSeededDefaults = hasSeededDefaults
         } else {
             context.insert(
                 SettingsRecord(
                     payload: payload,
-                    appliedBridgePayload: appliedPayload,
-                    hasSeededDefaults: hasSeededDefaults
+                    appliedBridgePayload: appliedPayload
                 )
             )
         }

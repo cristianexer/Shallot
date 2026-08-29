@@ -19,7 +19,12 @@ public final class AppModel {
     public let settings: SettingsViewModel
     public let lock: any AppLocking
 
+    /// Which destination the iPad sidebar has selected.
     public var section: AppSection = .browser
+
+    /// Which destination is presented over the browser on a phone, where the
+    /// browser is the root of the app rather than one tab of four.
+    public var presentedSection: AppSection?
     public var torState: TorRuntimeState = .off
     public var toast: ToastMessage?
 
@@ -84,10 +89,7 @@ public final class AppModel {
         // Each view model is handed exactly the capability it needs, as a
         // closure over an already-built collaborator. No view model reaches
         // back into this coordinator, so none of them can reach each other.
-        self.favourites = FavouritesViewModel(
-            repository: favouritesRepository,
-            open: { url in browser.open(url: url) }
-        )
+        self.favourites = FavouritesViewModel(repository: favouritesRepository)
 
         self.monitor = MonitorViewModel(
             feed: monitorFeed,
@@ -108,6 +110,20 @@ public final class AppModel {
 
         engine.settings = settingsStore.settings
         engine.monitor = monitorFeed
+
+        // Wired after the stored properties exist, because opening a favourite
+        // has to *go* to the page — loading it into a tab you cannot see is
+        // exactly the bug this closes.
+        self.favourites.open = { [weak self] url in
+            browser.open(url: url)
+            self?.showBrowser()
+        }
+    }
+
+    /// Brings the browser to the front, dismissing anything over it.
+    public func showBrowser() {
+        presentedSection = nil
+        section = .browser
     }
 
     deinit {
@@ -220,13 +236,22 @@ public final class AppModel {
 
     // MARK: - Actions shared across screens
 
-    public func show(_ section: AppSection) {
-        self.section = section
+    /// Shows a destination the way this shell shows destinations.
+    ///
+    /// On a phone the browser is the root and the rest are presented over it;
+    /// on an iPad they are sidebar selections.
+    public func show(_ section: AppSection, isCompact: Bool) {
+        if isCompact, section != .browser {
+            presentedSection = section
+        } else {
+            presentedSection = nil
+            self.section = section
+        }
     }
 
     public func newIdentity() async {
         await browser.newIdentity()
-        section = .browser
+        showBrowser()
         toast = ToastMessage("New identity · session cleared")
     }
 

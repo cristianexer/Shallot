@@ -16,10 +16,4 @@ public protocol SettingsStoring: AnyObject {
     var needsRelaunchForBridges: Bool { get }
     func markBridgesApplied()
 
-    /// Whether the first-run favourites have already been offered.
-    ///
-    /// Tracked so that deleting every favourite is respected rather than undone
-    /// at the next launch.
-    var hasSeededDefaults: Bool { get }
-    func markDefaultsSeeded()
 }

@@ -1,10 +1,17 @@
-
 import Domain
 import DesignSystem
 import SwiftUI
 
-/// The adaptive shell. Both layouts bind to the *same* view models, so
-/// behaviour is identical on iPhone and iPad and only the chrome differs.
+/// The adaptive shell.
+///
+/// The browser is the root of the app. On a phone that is the whole shell: one
+/// row of chrome above the page and one bar of browsing controls below it, with
+/// Favourites, the Monitor and Settings presented from the overflow menu as the
+/// occasional destinations they are. On an iPad the sidebar shows those
+/// destinations permanently, because there is room for them.
+///
+/// Both shells bind to the *same* view models, so behaviour is identical and
+/// only the chrome differs.
 public struct RootShell: View {
     @Bindable var model: AppModel
 
@@ -12,9 +19,10 @@ public struct RootShell: View {
     @Environment(\.scenePhase) private var scenePhase
 
     /// Owned here rather than left to `NavigationSplitView`, so the sidebar can
-    /// be revealed from our own chrome instead of from a navigation bar sitting
+    /// be toggled from our own chrome instead of from a navigation bar sitting
     /// above it.
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var isShowingTabs = false
 
     public init(model: AppModel) {
         self.model = model
@@ -31,6 +39,12 @@ public struct RootShell: View {
         .tint(Palette.arterialSoft)
         .preferredColorScheme(.dark)
         .toast($model.toast)
+        .sheet(isPresented: $isShowingTabs) {
+            TabOverview(model: model.browser)
+        }
+        .sheet(item: $model.presentedSection) { section in
+            destinationSheet(section)
+        }
         .privacyShield(
             isObscured: model.isObscured,
             isEnabled: model.settings.settings.hideInAppSwitcher
@@ -53,25 +67,58 @@ public struct RootShell: View {
         }
     }
 
-    // MARK: - Compact (iPhone portrait)
+    // MARK: - Compact (iPhone)
 
     private var compactShell: some View {
         ZStack(alignment: .bottom) {
             ShallotBackdrop(isPaused: model.isObscured)
 
-            screen
-                // The bar floats over the content, so content has to end above
-                // it rather than behind it.
-                .safeAreaPadding(.bottom, isTabBarVisible ? 76 : 8)
+            browser
+                // The bar floats over the page, so the page has to end above it
+                // rather than behind it.
+                .safeAreaPadding(.bottom, isToolbarVisible ? 72 : 6)
 
-            AppTabBar(selection: $model.section)
-                .padding(.bottom, 12)
+            BrowserToolbar(model: model.browser) { isShowingTabs = true }
+                .padding(.bottom, 10)
                 // Slides away with the rest of the chrome while a page is being
-                // scrolled, and comes straight back on the way up.
-                .offset(y: isTabBarVisible ? 0 : 130)
-                .opacity(isTabBarVisible ? 1 : 0)
+                // read, and comes straight back on the way up.
+                .offset(y: isToolbarVisible ? 0 : 130)
+                .opacity(isToolbarVisible ? 1 : 0)
         }
-        .animation(.easeOut(duration: 0.22), value: isTabBarVisible)
+        .animation(.easeOut(duration: 0.22), value: isToolbarVisible)
+    }
+
+    /// The bar hides only while a page is being scrolled.
+    private var isToolbarVisible: Bool { model.browser.isChromeVisible }
+
+    // MARK: - Regular (iPad, iPhone landscape)
+
+    private var regularShell: some View {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            sidebar
+        } detail: {
+            ZStack(alignment: .bottom) {
+                ShallotBackdrop(isPaused: model.isObscured)
+
+                screen
+                    .safeAreaPadding(.bottom, model.section == .browser && isToolbarVisible ? 72 : 6)
+
+                if model.section == .browser {
+                    BrowserToolbar(model: model.browser) { isShowingTabs = true }
+                        .padding(.bottom, 10)
+                        .offset(y: isToolbarVisible ? 0 : 130)
+                        .opacity(isToolbarVisible ? 1 : 0)
+                }
+            }
+            .animation(.easeOut(duration: 0.22), value: isToolbarVisible)
+            // Hiding the detail's navigation bar is what keeps the iPad to a
+            // single row of chrome; the toggle it would have held is published
+            // below and drawn inline by whichever screen is on show.
+            .toolbar(.hidden, for: .navigationBar)
+            .toolbarBackground(.hidden, for: .navigationBar)
+        }
+        .navigationSplitViewStyle(.balanced)
+        .environment(\.sidebarControl, sidebarControl)
     }
 
     /// The sidebar control handed to whichever screen is on show.
@@ -87,40 +134,7 @@ public struct RootShell: View {
         }
     }
 
-    /// The tab bar only ever hides on the browser, and only while a page is
-    /// being read — the list screens keep it, because there is nothing there
-    /// worth surrendering the navigation for.
-    private var isTabBarVisible: Bool {
-        model.section != .browser || model.browser.isChromeVisible
-    }
-
-    // MARK: - Regular (iPad, iPhone landscape)
-
-    private var regularShell: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            sidebar
-        } detail: {
-            // The backdrop belongs *inside* the detail pane on this shell.
-            // `NavigationSplitView` paints its own opaque background, so a
-            // backdrop behind the whole split view is simply covered up and
-            // the rain never appears next to the page.
-            ZStack {
-                ShallotBackdrop(isPaused: model.isObscured)
-                screen
-            }
-            // Hiding the detail's navigation bar is what collapses the iPad
-            // back to a single row of chrome; the toggle it would have held is
-            // published below and drawn inline by whichever screen is on show.
-            .toolbar(.hidden, for: .navigationBar)
-            .toolbarBackground(.hidden, for: .navigationBar)
-        }
-        .navigationSplitViewStyle(.balanced)
-        .environment(\.sidebarControl, sidebarControl)
-    }
-
     private var sidebar: some View {
-        // `List` wants an optional selection binding; the app always has a
-        // section, so a nil write is simply ignored.
         List(
             selection: Binding<AppSection?>(
                 get: { model.section },
@@ -176,9 +190,8 @@ public struct RootShell: View {
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
         .background(Palette.void.opacity(0.4))
-        // The sidebar's own navigation bar is hidden too. It held a second
-        // copy of the sidebar toggle — two controls doing one job, which is
-        // the clutter this shell was cleaned up to remove — and its title is
+        // The sidebar's own navigation bar is hidden too. It held a second copy
+        // of the sidebar toggle — two controls doing one job — and its title is
         // better said once, inside the list.
         .toolbar(.hidden, for: .navigationBar)
     }
@@ -188,30 +201,52 @@ public struct RootShell: View {
     @ViewBuilder
     private var screen: some View {
         switch model.section {
-        case .browser:
-            BrowserView(
-                model: model.browser,
-                torState: model.torState,
-                circuitSummary: circuitSummary,
-                favourites: model.favourites.favourites,
-                onNewIdentity: { await model.newIdentity() },
-                onAddFavourite: {
-                    model.section = .favourites
-                    model.favourites.beginAdding()
-                },
-                onRetryConnection: { await model.retryConnection() },
-                canRetryConnection: model.canRetryConnection
-            )
-        case .favourites:
-            FavouritesView(model: model.favourites)
-        case .monitor:
-            MonitorView(model: model.monitor)
-        case .settings:
-            SettingsView(
-                model: model.settings,
-                biometryName: model.lock.biometryName,
-                isBiometryAvailable: model.lock.isAvailable
-            )
+        case .browser: browser
+        case .favourites: FavouritesView(model: model.favourites)
+        case .monitor: MonitorView(model: model.monitor)
+        case .settings: settingsScreen
+        }
+    }
+
+    private var browser: some View {
+        BrowserView(
+            model: model.browser,
+            torState: model.torState,
+            circuitSummary: circuitSummary,
+            favourites: model.favourites.favourites,
+            onNewIdentity: { await model.newIdentity() },
+            onShowSection: { model.show($0, isCompact: sizeClass == .compact) },
+            onRetryConnection: { await model.retryConnection() },
+            canRetryConnection: model.canRetryConnection
+        )
+    }
+
+    private var settingsScreen: some View {
+        SettingsView(
+            model: model.settings,
+            biometryName: model.lock.biometryName,
+            isBiometryAvailable: model.lock.isAvailable
+        )
+    }
+
+    /// A destination presented over the browser on a phone.
+    private func destinationSheet(_ section: AppSection) -> some View {
+        NavigationStack {
+            ZStack {
+                ShallotBackdrop(isPaused: true)
+                switch section {
+                case .favourites: FavouritesView(model: model.favourites)
+                case .monitor: MonitorView(model: model.monitor)
+                case .settings: settingsScreen
+                case .browser: EmptyView()
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { model.presentedSection = nil }
+                }
+            }
+            .toolbarBackground(.hidden, for: .navigationBar)
         }
     }
 

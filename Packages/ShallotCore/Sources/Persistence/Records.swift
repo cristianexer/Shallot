@@ -62,20 +62,14 @@ public final class SettingsRecord {
     /// The bridge configuration Tor was actually started with, so the app can
     /// tell whether a relaunch is pending.
     public var appliedBridgePayload: Data?
-    /// Set once the first-run favourites have been offered, so that clearing
-    /// them stays cleared.
-    public var hasSeededDefaults: Bool = false
-
     public init(
         identifier: String = SettingsRecord.singletonIdentifier,
         payload: Data,
-        appliedBridgePayload: Data? = nil,
-        hasSeededDefaults: Bool = false
+        appliedBridgePayload: Data? = nil
     ) {
         self.identifier = identifier
         self.payload = payload
         self.appliedBridgePayload = appliedBridgePayload
-        self.hasSeededDefaults = hasSeededDefaults
     }
 
     public static let singletonIdentifier = "shallot.settings"

@@ -64,6 +64,14 @@ public final class BrowserTab: Identifiable {
 
     public var url: URL?
     public var title: String
+
+    /// A picture of what this tab was last showing.
+    ///
+    /// Kept on the tab rather than in the engine so a tab whose web view has
+    /// been shed under memory pressure still has something to show in the tab
+    /// overview. `Data` rather than an image type because `Domain` stays free
+    /// of UI frameworks.
+    public var thumbnail: Data?
     public var loadState: TabLoadState
     public var canGoBack: Bool
     public var canGoForward: Bool
@@ -93,6 +101,10 @@ public final class BrowserTab: Identifiable {
         self.security = security
         self.securityLevelOverride = securityLevelOverride
     }
+
+    /// What the overview shows when there is no thumbnail: a new tab, or one
+    /// that has not painted yet.
+    public var hasThumbnail: Bool { thumbnail != nil }
 
     /// True while the tab is showing the start page rather than a web page.
     public var isShowingStartPage: Bool { url == nil }

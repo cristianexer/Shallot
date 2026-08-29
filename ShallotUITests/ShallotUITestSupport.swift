@@ -95,29 +95,31 @@ func launchShallot(file: StaticString = #filePath, line: UInt = #line) -> XCUIAp
 // MARK: - Navigation
 
 extension XCUIApplication {
-    /// The tab-bar button (compact) or sidebar row (regular) for `section`.
+    /// The sidebar row for `section`, on the shell that has a sidebar.
     ///
-    /// The compact bar exposes buttons; the sidebar exposes list cells. Both
-    /// carry the same label, so the type is whatever is on screen.
+    /// The phone has no permanent section control at all any more: the browser
+    /// is the root of the app and the other three are reached from the
+    /// overflow menu, so `show(_:)` opens that menu instead.
     @MainActor
     func sectionControl(_ section: ShallotSection) -> XCUIElement {
         let title = section.rawValue
-        for candidate in [buttons[title], cells[title], staticTexts[title]] where candidate.exists {
+        for candidate in [cells[title], buttons[title], staticTexts[title]] where candidate.exists {
             return candidate
         }
-        // Nothing has resolved yet. Hand back whichever this shell will use, so
-        // the caller can wait on it.
         return usesSplitViewShell ? cells[title] : buttons[title]
     }
 
-    /// Waits for either shell's section controls to be on screen.
+    /// Waits for the shell to be up.
+    ///
+    /// The overflow menu is the one control present on every shell and every
+    /// screen, so it is the landmark for "the app has launched".
     @MainActor
     func waitForShell(timeout: TimeInterval = Timeout.element) -> Bool {
-        if sectionControl(.browse).waitForExistence(timeout: Timeout.brief) { return true }
+        if buttons["More"].waitForExistence(timeout: Timeout.brief) { return true }
         // The split view can still start collapsed — a narrower window, or a
         // different iPadOS default — so ask for the sidebar before giving up.
         revealSidebarIfNeeded()
-        return sectionControl(.browse).waitForExistence(timeout: timeout)
+        return buttons["More"].waitForExistence(timeout: timeout)
     }
 
     /// Taps the sidebar control, but only when it would *reveal* the sidebar.
@@ -135,24 +137,46 @@ extension XCUIApplication {
     }
 
     /// Moves to `section` and waits for its landmark.
+    ///
+    /// Two different journeys, because the shells are different apps in this
+    /// respect: the iPad selects a sidebar row, the phone opens the overflow
+    /// menu and presents the destination over the browser.
     @MainActor
     func show(
         _ section: ShallotSection,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        var control = sectionControl(section)
-        if !control.waitForExistence(timeout: Timeout.brief) {
-            // The sidebar may have collapsed itself — for instance after a
-            // rotation, or on a narrower split-view window.
-            revealSidebarIfNeeded()
-            control = sectionControl(section)
+        if section == .browse {
+            dismissDestinationIfPresented()
+        } else if usesSplitViewShell {
+            var control = sectionControl(section)
+            if !control.waitForExistence(timeout: Timeout.brief) {
+                // The sidebar may have collapsed itself — after a rotation, or
+                // on a narrower split-view window.
+                revealSidebarIfNeeded()
+                control = sectionControl(section)
+            }
+            guard control.waitForExistence(timeout: Timeout.element) else {
+                XCTFail("No sidebar row for \(section.rawValue).", file: file, line: line)
+                return
+            }
+            control.tap()
+        } else {
+            dismissDestinationIfPresented()
+            let menu = buttons["More"]
+            guard menu.waitForExistence(timeout: Timeout.element) else {
+                XCTFail("The overflow menu never appeared.", file: file, line: line)
+                return
+            }
+            menu.tap()
+            let item = buttons[section.rawValue]
+            guard item.waitForExistence(timeout: Timeout.transition) else {
+                XCTFail("No menu item for \(section.rawValue).", file: file, line: line)
+                return
+            }
+            item.tap()
         }
-        guard control.waitForExistence(timeout: Timeout.element) else {
-            XCTFail("No control for the \(section.rawValue) section.", file: file, line: line)
-            return
-        }
-        control.tap()
 
         let landmark = element(section.landmark.type, labelled: section.landmark.label)
         XCTAssertTrue(
@@ -161,6 +185,15 @@ extension XCUIApplication {
             file: file,
             line: line
         )
+    }
+
+    /// Closes a destination presented over the browser, if one is up.
+    @MainActor
+    func dismissDestinationIfPresented() {
+        let done = buttons["Done"]
+        guard done.exists, done.isHittable else { return }
+        done.tap()
+        _ = buttons["More"].waitForExistence(timeout: Timeout.transition)
     }
 
     /// The first element of `type` whose accessibility label is exactly `label`.

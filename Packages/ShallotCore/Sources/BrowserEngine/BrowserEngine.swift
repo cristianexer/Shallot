@@ -136,6 +136,20 @@ public final class BrowserEngine {
 
     // MARK: - Events
 
+    /// Captures what each live tab is showing, for the tab overview.
+    ///
+    /// Only tabs with a web view can be captured; the rest keep whatever
+    /// thumbnail they were last given, which is why the picture lives on the
+    /// tab and not here.
+    public func captureThumbnails(for tabs: [BrowserTab]) async {
+        for tab in tabs {
+            guard let session = sessions[tab.id] else { continue }
+            if let data = await session.captureThumbnail() {
+                tab.thumbnail = data
+            }
+        }
+    }
+
     /// Records a security event, if anything is listening.
     public func report(_ event: SecurityEvent) {
         monitor?.record(event)

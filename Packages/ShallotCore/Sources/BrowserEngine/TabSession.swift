@@ -164,6 +164,23 @@ public final class TabSession: NSObject {
         await store.removeData(ofTypes: types, modifiedSince: .distantPast)
     }
 
+    /// A JPEG of the visible page, sized for a tab card.
+    ///
+    /// Returns `nil` rather than a blank image when the web view has not laid
+    /// out yet — a white rectangle in the overview reads as a broken tab.
+    public func captureThumbnail(width: CGFloat = 420) async -> Data? {
+        guard webView.bounds.width > 0, webView.bounds.height > 0 else { return nil }
+        let configuration = WKSnapshotConfiguration()
+        configuration.snapshotWidth = NSNumber(value: Double(width))
+        // The visible rect only: a full-page snapshot of a long article is a
+        // tall strip that says nothing at card size.
+        configuration.rect = CGRect(origin: .zero, size: webView.bounds.size)
+        guard let image = try? await webView.takeSnapshot(configuration: configuration) else {
+            return nil
+        }
+        return image.jpegData(compressionQuality: 0.7)
+    }
+
     // MARK: - State mirroring
 
     private func observeState() {

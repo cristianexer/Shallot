@@ -13,11 +13,9 @@ public struct BrowserView: View {
     var circuitSummary: String
     var favourites: [Favourite]
     var onNewIdentity: () async -> Void
-    var onAddFavourite: () -> Void
+    var onShowSection: (AppSection) -> Void
     var onRetryConnection: () async -> Void
     var canRetryConnection: Bool
-
-    @State private var isShowingTabs = false
 
     public init(
         model: BrowserViewModel,
@@ -25,7 +23,7 @@ public struct BrowserView: View {
         circuitSummary: String,
         favourites: [Favourite],
         onNewIdentity: @escaping () async -> Void,
-        onAddFavourite: @escaping () -> Void,
+        onShowSection: @escaping (AppSection) -> Void,
         onRetryConnection: @escaping () async -> Void,
         canRetryConnection: Bool = true
     ) {
@@ -34,15 +32,22 @@ public struct BrowserView: View {
         self.circuitSummary = circuitSummary
         self.favourites = favourites
         self.onNewIdentity = onNewIdentity
-        self.onAddFavourite = onAddFavourite
+        self.onShowSection = onShowSection
         self.onRetryConnection = onRetryConnection
         self.canRetryConnection = canRetryConnection
     }
 
     public var body: some View {
         content
-            .safeAreaInset(edge: .top, spacing: 0) { header }
-            .sheet(isPresented: $isShowingTabs) { TabOverview(model: model) }
+            // The header is *removed* from the inset when it hides, not merely
+            // moved off screen: an inset that keeps its height leaves a band of
+            // empty space where the bar was, and the page never reclaims it.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if model.isChromeVisible {
+                    header.transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .animation(.easeOut(duration: 0.22), value: model.isChromeVisible)
             .task { await model.onAppear() }
     }
 
@@ -53,7 +58,7 @@ public struct BrowserView: View {
             model: model,
             torState: torState,
             onNewIdentity: { Task { await onNewIdentity() } },
-            onShowTabs: { isShowingTabs = true }
+            onShowSection: onShowSection
         )
         .padding(.horizontal, 12)
         .padding(.top, 4)
@@ -63,15 +68,9 @@ public struct BrowserView: View {
         // visual idea.
         .background(alignment: .bottom) {
             Rectangle()
-                .fill(Palette.edge.opacity(model.isChromeVisible ? 0.35 : 0))
+                .fill(Palette.edge.opacity(0.35))
                 .frame(height: Metrics.hairline)
         }
-        .offset(y: model.isChromeVisible ? 0 : -120)
-        .opacity(model.isChromeVisible ? 1 : 0)
-        .animation(.easeOut(duration: 0.22), value: model.isChromeVisible)
-        // Tapping the sliver of screen the collapsed bar leaves brings it back,
-        // so the chrome is never more than one tap away.
-        .accessibilityElement(children: .contain)
     }
 
     // MARK: - Content
@@ -109,7 +108,7 @@ public struct BrowserView: View {
                     isConnected: torState.canCarryTraffic,
                     favourites: favourites,
                     onOpen: { model.open(url: $0.url) },
-                    onAdd: onAddFavourite
+                    onAdd: { onShowSection(.favourites) }
                 )
                 .padding(.bottom, 110)
             }

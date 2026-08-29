@@ -7,7 +7,12 @@ import Observation
 @Observable
 public final class FavouritesViewModel {
     @ObservationIgnored private let repository: any FavouritesRepository
-    @ObservationIgnored private let open: (URL) -> Void
+
+    /// What to do with a favourite the user tapped.
+    ///
+    /// Settable rather than injected, because the coordinator that knows how to
+    /// *navigate* to the browser does not exist yet when this is built.
+    @ObservationIgnored public var open: (URL) -> Void
 
     /// Set when an edit fails, so the UI can say why instead of silently
     /// dropping the change.
@@ -22,7 +27,7 @@ public final class FavouritesViewModel {
     public var newAddress: String = ""
     public var isAdding = false
 
-    public init(repository: any FavouritesRepository, open: @escaping (URL) -> Void) {
+    public init(repository: any FavouritesRepository, open: @escaping (URL) -> Void = { _ in }) {
         self.repository = repository
         self.open = open
     }
