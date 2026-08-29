@@ -38,12 +38,36 @@ struct WebKitLeakTests {
         return (engine, tab, session)
     }
 
-    /// Loads `html` and waits for the load to settle.
-    static func load(_ html: String, into session: TabSession, timeout: Duration = .seconds(10)) async {
-        session.webView.loadHTMLString(html, baseURL: baseURL)
-        await waitUntil(timeout: timeout) { !session.webView.isLoading }
-        // One extra turn so `didFinish` has run and the DOM is queryable.
-        try? await Task.sleep(for: .milliseconds(120))
+    /// A sentinel appended to every probe page.
+    ///
+    /// Waiting on `isLoading` is not enough: on a slow machine the check can
+    /// run before the load has started, and querying the *previous* document
+    /// returns an empty DOM — which would read as a mitigation working when
+    /// nothing had been tested at all. Waiting for an element that only exists
+    /// in the new page cannot be fooled that way.
+    static let readyMarker = "shallot-probe-ready"
+
+    /// Loads `html` and waits until that document is the one on screen.
+    @discardableResult
+    static func load(
+        _ html: String,
+        into session: TabSession,
+        timeout: Duration = .seconds(30)
+    ) async -> Bool {
+        session.webView.loadHTMLString(
+            html + "<div id=\"\(readyMarker)\"></div>",
+            baseURL: baseURL
+        )
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        while ContinuousClock.now < deadline {
+            let found = await evaluate(
+                "!!document.getElementById('\(readyMarker)')",
+                in: session
+            )
+            if found == "true" { return true }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return false
     }
 
     /// Polls `condition` until it holds or the timeout expires. Never hangs.

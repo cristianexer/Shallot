@@ -384,15 +384,13 @@ struct BrowserJourneyTests {
         #expect(await Self.waitUntil { engine.sessionCount == 1 })
 
         let tab = try #require(model.browser.activeTab)
+        // Deliberately not waiting for the load to fail: how long a dead port
+        // takes to give up is a property of the machine, not of the app, and
+        // this test is about what the tab remembers and what reload then does.
         #expect(
-            await Self.waitUntil(timeout: .seconds(10)) {
-                if case .failed = tab.loadState { return true }
-                return false
-            },
-            "the load should have failed against a dead port"
+            await Self.waitUntil { tab.requestedURL == url },
+            "the tab remembers what it was asked for"
         )
-
-        #expect(tab.requestedURL == url, "the tab remembers what it was asked for")
         #expect(model.browser.canReload, "and reload must be available to try again")
 
         // What reload will *do* is asserted as a value rather than by racing

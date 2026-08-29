@@ -11,6 +11,25 @@ existing sources are the specification for the style, and they are consistent.
 
 Everyone taking part is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
+## Running the gates locally
+
+CI is two scripts, and they are the same two scripts you can run here — so a
+red build is something you can reproduce and fix without pushing a commit to
+find out:
+
+```sh
+.github/scripts/lint.sh    # SwiftLint --strict, blocking; swift-format, advisory
+.github/scripts/test.sh    # build once, then the unit, security and UI suites
+```
+
+`test.sh` picks the same simulator CI would (the newest available iPhone), so a
+timing-sensitive test that only fails on the runner usually fails here too. Pass
+`SHALLOT_DEVICE_ID=<udid>` to pin a different one.
+
+The live Tor suite and the performance suite are excluded from both, by name —
+they need the real network and a quiet machine. See
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how to run those.
+
 ## Before you start
 
 * For anything more than a small fix, open an issue first. Some of what looks

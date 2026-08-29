@@ -68,72 +68,14 @@ jobs:
           xcodebuild -project "$PROJECT" -scheme "$SCHEME" \
             -resolvePackageDependencies
 
-      # The simulator is discovered rather than pinned by name: which iPhone
-      # models exist depends on the runtime the runner's Xcode ships, and a
-      # hard-coded name fails outright the moment that moves. The script asks
-      # simctl directly, creates a device if the image has a runtime but no
-      # ready one, and dumps the runtime and device lists if it still cannot
-      # find anything — so a future failure is diagnosable from the log.
-      - name: Pick a simulator
-        id: sim
-        run: |
-          udid=$(.github/scripts/pick-simulator.sh)
-          echo "Using simulator $udid"
-          echo "destination=platform=iOS Simulator,id=$udid" >> "$GITHUB_OUTPUT"
-
-      # build-for-testing, not plain build: it compiles the app and both test
-      # bundles once, and the two test steps below then only run them.
-      - name: Build for testing
-        run: |
-          set -o pipefail
-          xcodebuild build-for-testing \
-            -project "$PROJECT" -scheme "$SCHEME" \
-            -destination "${{ steps.sim.outputs.destination }}" \
-            -derivedDataPath DerivedData \
-            $UNSIGNED | xcbeautify --renderer github-actions
-
-      # Anything named *Live* or *Integration* needs the real Tor network and
-      # belongs to the manual job at the bottom of this file, so it is skipped
-      # here. The rest is hermetic by construction: AppContainer detects the
-      # test host and substitutes MockTorService and an in-memory store.
-      - name: Find suites that need the live network
-        id: live
-        run: |
-          suites=$(grep -rhoE '^ *(public |internal |final )*(class|struct) +[A-Za-z0-9_]*(Live|Integration)[A-Za-z0-9_]*' \
-            --include='*.swift' ShallotTests ShallotUITests 2>/dev/null \
-            | awk '{ print $NF }' | sort -u)
-          flags=""
-          for suite in $suites; do
-            if grep -rql "$suite" --include='*.swift' ShallotUITests 2>/dev/null; then
-              flags="$flags -skip-testing:ShallotUITests/$suite"
-            else
-              flags="$flags -skip-testing:ShallotTests/$suite"
-            fi
-          done
-          echo "flags=$flags" >> "$GITHUB_OUTPUT"
-
-      - name: Unit tests (ShallotTests)
-        run: |
-          set -o pipefail
-          xcodebuild test-without-building \
-            -project "$PROJECT" -scheme "$SCHEME" \
-            -destination "${{ steps.sim.outputs.destination }}" \
-            -derivedDataPath DerivedData \
-            -only-testing:ShallotTests ${{ steps.live.outputs.flags }} \
-            -skip-testing:ShallotTests/PerformanceTests \
-            -resultBundlePath TestResults-Unit.xcresult \
-            $UNSIGNED | xcbeautify --renderer github-actions
-
-      - name: UI tests (ShallotUITests)
-        run: |
-          set -o pipefail
-          xcodebuild test-without-building \
-            -project "$PROJECT" -scheme "$SCHEME" \
-            -destination "${{ steps.sim.outputs.destination }}" \
-            -derivedDataPath DerivedData \
-            -only-testing:ShallotUITests ${{ steps.live.outputs.flags }} \
-            -resultBundlePath TestResults-UI.xcresult \
-            $UNSIGNED | xcbeautify --renderer github-actions
+      # Every step below runs from a script so the same gate can be run
+      # locally — `.github/scripts/test.sh` — instead of being debugged by
+      # pushing commits and reading someone else's log.
+      - name: Build and test
+        env:
+          SHALLOT_DERIVED_DATA: DerivedData
+          XCBEAUTIFY_RENDERER: github-actions
+        run: .github/scripts/test.sh
 
       - name: Upload test results
         if: always()
@@ -157,24 +99,12 @@ jobs:
       - name: Install SwiftLint
         run: brew install swiftlint
 
-      # --strict promotes every warning to an error, so this step fails the
-      # build on any violation at all. .swiftlint.yml is configured to be clean
-      # on this codebase; a new violation is therefore a real one.
-      - name: SwiftLint
-        run: swiftlint lint --strict --reporter github-actions-logging
+      - name: Select Xcode
+        run: .github/scripts/select-xcode.sh
 
-      # swift-format ships inside the Xcode toolchain. It runs in lint mode as
-      # an advisory check: its pretty-printer disagrees with some of this
-      # codebase's hand-wrapped call sites (multi-line `guard let` in
-      # particular) and with prose string literals that are shown to the user,
-      # and reformatting security-critical files to satisfy a printer is not a
-      # trade we want CI to force. Genuine errors — a file it cannot parse, or
-      # a broken .swift-format — still fail this step.
-      - name: swift-format (lint)
-        run: |
-          .github/scripts/select-xcode.sh
-          xcrun swift-format lint --recursive \
-            Packages/ShallotCore/Sources Shallot ShallotTests ShallotUITests
+      # Also runnable locally: `.github/scripts/lint.sh`.
+      - name: Lint
+        run: .github/scripts/lint.sh
 
   # ---------------------------------------------------------------------------
   # Integration, leak and performance suites.

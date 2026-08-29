@@ -1,6 +1,7 @@
 import Domain
 import DesignSystem
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Saved sites, grouped into onion services and clearnet.
 public struct FavouritesView: View {
@@ -21,6 +22,7 @@ public struct FavouritesView: View {
                         subtitle: "On this device only. No cloud sync — sync is a way to be identified."
                     )
                     addButton
+                    transferMenu
                 }
 
                 AdvisoryBox(
@@ -60,7 +62,42 @@ public struct FavouritesView: View {
         } message: {
             Text(model.errorMessage ?? "")
         }
+        .alert(
+            "Import bookmarks",
+            isPresented: Binding(get: { model.importSummary != nil }, set: { if !$0 { model.importSummary = nil } })
+        ) {
+            Button("OK", role: .cancel) { model.importSummary = nil }
+        } message: {
+            Text(model.importSummary ?? "")
+        }
+        .fileImporter(
+            isPresented: $model.isImporting,
+            allowedContentTypes: Self.bookmarkFileTypes,
+            allowsMultipleSelection: false
+        ) { result in
+            model.finishImport(result)
+        }
+        .fileExporter(
+            isPresented: $model.isExporting,
+            document: BookmarkExportDocument(text: model.exportText),
+            contentType: .html,
+            defaultFilename: "shallot-bookmarks"
+        ) { result in
+            model.finishExport(result)
+        }
     }
+
+    /// `.html` twice over: the declared type, and the one the system infers
+    /// from the extension. A bookmark file exported on a desktop and carried
+    /// here through a cloud drive often arrives with no type declared at all,
+    /// and without the second entry the picker greys it out.
+    private static let bookmarkFileTypes: [UTType] = {
+        var types: [UTType] = [.html]
+        if let byExtension = UTType(filenameExtension: "html"), !types.contains(byExtension) {
+            types.append(byExtension)
+        }
+        return types
+    }()
 
     private var columns: [GridItem] {
         // Cards widen with the text they hold, so a long onion address is
@@ -146,6 +183,38 @@ public struct FavouritesView: View {
         .accessibilityLabel("New favourite")
     }
 
+    /// Import and export, behind an overflow menu rather than beside the `+`.
+    ///
+    /// Both are rare, both open a system picker over the whole screen, and
+    /// neither should be as easy to hit by accident as adding a favourite is.
+    private var transferMenu: some View {
+        Menu {
+            Button {
+                model.beginImport()
+            } label: {
+                Label("Import bookmarks…", systemImage: "square.and.arrow.down")
+            }
+            Button {
+                model.beginExport()
+            } label: {
+                Label("Export bookmarks…", systemImage: "square.and.arrow.up")
+            }
+            .disabled(!model.canExport)
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 16, weight: .semibold))
+                .frame(width: 38, height: 38)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Palette.arterialSoft)
+        .frame(minWidth: Metrics.minimumTouchTarget, minHeight: Metrics.minimumTouchTarget)
+        .accessibilityLabel("Import and export bookmarks")
+        // Several controls in this app already share a label; the identifier
+        // is what lets a UI test address this one and nothing else.
+        .accessibilityIdentifier("favourites-transfer-menu")
+    }
+
     private var addSheet: some View {
         NavigationStack {
             ZStack {
@@ -191,5 +260,29 @@ public struct FavouritesView: View {
                 }
             }
         }
+    }
+}
+
+/// The exported bookmark file, as the export panel wants it.
+///
+/// Read support exists only because `FileDocument` demands it; the import path
+/// goes through `.fileImporter` so that it can hold the security-scoped
+/// resource itself.
+struct BookmarkExportDocument: FileDocument {
+    static let readableContentTypes: [UTType] = [.html]
+
+    var text: String
+
+    init(text: String) {
+        self.text = text
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        let data = configuration.file.regularFileContents ?? Data()
+        text = String(decoding: data, as: UTF8.self)
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: Data(text.utf8))
     }
 }
