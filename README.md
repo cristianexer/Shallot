@@ -7,12 +7,23 @@ byte of web traffic routed over SOCKS5 through a local Tor client, `.onion`
 reachable, nothing written to disk but favourites and settings.
 
 <p align="center">
-  <img src="docs/screenshot-iphone.png" alt="Shallot on iPhone: the start page, with the live Tor circuit and quick access" width="300">
-  &nbsp;&nbsp;
-  <img src="docs/screenshot-ipad.png" alt="Shallot on iPad: the split-view shell, with the sidebar listing open tabs and their circuits" width="440">
+  <a href="https://github.com/cristianexer/Shallot/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/cristianexer/Shallot/ci.yml?branch=main&label=CI&style=flat-square" alt="CI status"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MIT-blue?style=flat-square" alt="MIT licence"></a>
+  <img src="https://img.shields.io/badge/Swift-6.1-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift 6.1">
+  <img src="https://img.shields.io/badge/platform-iOS%2018%2B%20%7C%20iPadOS-lightgrey?style=flat-square" alt="iOS 18+ and iPadOS">
 </p>
 
-<p align="center"><em>Both shells bind to the same view models, so behaviour is identical and only the chrome differs. One row of chrome, which slides away while you scroll a page and comes back on the way up.</em></p>
+<p align="center">
+  <img src="docs/screenshot-iphone.png" alt="Shallot on iPhone: the start page, showing the live Tor circuit" width="270">
+  &nbsp;
+  <img src="docs/screenshot-monitor.png" alt="The Monitor: circuit path, bandwidth and security events, all measured on the device" width="270">
+</p>
+
+<p align="center">
+  <img src="docs/screenshot-ipad.png" alt="Shallot on iPad: the split-view shell, with the sidebar listing open tabs and their circuits" width="560">
+</p>
+
+<p align="center"><em>One row of chrome, which slides away while you scroll a page and comes back on the way up. Both shells bind to the same view models, so behaviour is identical and only the chrome differs.</em></p>
 
 ---
 
@@ -39,14 +50,71 @@ made equal.** We cannot patch the engine, so JavaScript fingerprinting surfaces
 we can do, we do: a three-step security level whose strongest setting turns
 JavaScript off entirely, content rule lists below the JavaScript layer, and the
 removal of the leaky APIs described below. What we cannot do, we say plainly in
-Settings. Overstating this to a journalist or an activist is the one mistake
-this app must never make.
+Settings, in the app's own words:
+
+> Shallot hides your IP address and location and reaches .onion sites. Because
+> iOS requires every browser to use Apple's web engine, it cannot fully match
+> desktop Tor Browser's anti-fingerprinting — raise the security level for more
+> protection.
+
+**Overstating this to a journalist or an activist is the one mistake this
+project must never make.** If you contribute here, that statement is not
+marketing copy to be tightened; it is a promise about what the software will and
+will not claim.
 
 There is a second hazard that is equally load-bearing. Independent research
 published in August 2026 documented three WebKit features that reach the network
 *outside* a configured proxy and leak the device's real IP and DNS regardless of
 how carefully the proxy is set. They are not fixed at the OS level. Shallot
 mitigates them itself; see [Security controls](#security-controls).
+
+---
+
+## Verified, not asserted
+
+Anonymity claims are cheap. `ShallotTests/Security/LiveTorIntegrationTests.swift`
+bootstraps a real Tor against the real network and checks the promises this app
+makes, one test per claim:
+
+- **Tor bootstraps** and reports its version back over the control channel.
+- **A three-hop circuit is built**, and at least one relay resolves to a country
+  from the *bundled* GeoIP databases — proving the Monitor's country labels cost
+  no network lookup.
+- **Traffic really goes through Tor.** `check.torproject.org/api/ip` returns
+  `IsTor: true` over a proxied connection, the same endpoint fetched directly
+  returns `IsTor: false`, and the two addresses differ.
+- **The app's own web view is routed too.** Not a `URLSession` standing in for
+  the browser: the exact `WKWebView` the app builds — same proxy configuration,
+  same ephemeral data store, same document-start user scripts — loads that
+  endpoint and its document body contains `"IsTor":true`.
+- **Two tabs leave by two different exit relays.** Two isolation keys get two
+  different SOCKS ports, and the two exit addresses do not match. If they ever
+  do, circuit isolation has silently collapsed.
+- **Onion services load**, in that same web view, at two independent addresses —
+  the Tor Project's own and a second one, because one service being up proves
+  less than two. `.onion` through `URLSession` would fail instantly, since
+  CFNetwork's SOCKS support resolves hostnames locally; that it works through
+  `proxyConfigurations` is the observable form of "DNS never happens on this
+  device".
+- **The Monitor is wired to reality**: real circuits, real bandwidth samples,
+  bootstrap at 100, all computed on-device.
+- **New Identity works**, and traffic still flows after `SIGNAL NEWNYM`.
+
+The suite is opt-in and needs a working network; see
+[the live suite](#the-live-suite) for how to run it.
+
+Two more security suites are hermetic and run on **every pull request**.
+`ShallotTests/Security/WebKitLeakTests.swift` builds a real `WKWebView` exactly
+as the app does, loads probe pages from strings so nothing leaves the machine,
+and asserts that DNS-prefetch hints are stripped — including ones injected by
+script after load — that `WebTransport`, WebAuthn and `RTCPeerConnection` are
+unreachable from a page, that a per-site opt-in restores a feature *and only for
+that site*, that every data store is proxied and non-persistent, and that with
+Tor down nothing loads at all.
+`ShallotTests/Security/NoTelemetryTests.swift` scans the shipping sources and
+fails the build if any module other than `TorKit` and `BrowserEngine` so much as
+mentions a networking API, if a known analytics SDK is imported anywhere, or if
+anything at all touches `UserDefaults`.
 
 ---
 
@@ -95,132 +163,13 @@ knows which Tor library, which storage engine and which authentication framework
 are in use. It also decides whether the app is running as a test host — it
 checks for `XCTestConfigurationFilePath` and the `--shallot-ui-testing` launch
 argument — and if so substitutes `MockTorService` and an in-memory model
-container. That is why the whole test suite is hermetic and needs no live Tor
-network.
+container. That is why the whole default test suite is hermetic and needs no
+live Tor network.
 
 The one deliberate architectural compromise: `ShallotCore` has no test targets
 of its own. Every suite lives in the app project's `ShallotTests`, because the
 WebKit leak tests need a host application to run a real `WKWebView`, and one
 command running every suite is worth more than two that can drift apart.
-
----
-
-## Build and run
-
-**Requirements:** Xcode 26 or later, Swift 6 with strict concurrency, an iOS 18
-or later simulator or device.
-
-```sh
-open Shallot.xcodeproj      # packages resolve on first open
-```
-
-or from the command line:
-
-```sh
-xcodebuild -project Shallot.xcodeproj -scheme Shallot -resolvePackageDependencies
-xcodebuild -project Shallot.xcodeproj -scheme Shallot \
-  -destination 'generic/platform=iOS Simulator' build
-```
-
-The first resolve builds the embedded Tor C library and OpenSSL from source and
-takes several minutes. Subsequent builds reuse it; CI caches it (see below).
-
-**A note on the deployment target.** The build spec asks for iOS 17, because
-that is the floor for `proxyConfigurations`, SwiftData and `@Observable`. The
-shipping floor is **iOS 18**, forced by `swift-tor` declaring `.iOS(.v18)` in
-its own manifest — and an embedded Tor is not something this app can do without.
-`Packages/ShallotCore/Package.swift` records this in a named constant so the
-reason travels with the decision, and `IPHONEOS_DEPLOYMENT_TARGET` on the app
-target matches at 18.0.
-
-Signing is standard automatic signing; the in-app proxy route needs **no special
-entitlement**, because `proxyConfigurations` is public API. Only a system-wide
-`NEPacketTunnelProvider` tunnel — explicitly out of scope — would need the
-Network Extension entitlement.
-
-Run on a **real device** for anything touching Tor or networking. The Simulator
-uses the macOS networking stack and will mislead you about proxy and TLS
-behaviour.
-
----
-
-## Tests
-
-Every suite that runs by default is hermetic: `AppContainer` detects a test
-host and swaps in `MockTorService` and an in-memory store, so nothing below
-needs the Tor network. The one exception is `LiveTorIntegrationTests`, which is
-opt-in and covered further down.
-
-```sh
-# Unit, logic and security suites (Swift Testing)
-xcodebuild test \
-  -project Shallot.xcodeproj -scheme Shallot \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
-  -only-testing:ShallotTests
-
-# UI suites (XCUITest)
-xcodebuild test \
-  -project Shallot.xcodeproj -scheme Shallot \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
-  -only-testing:ShallotUITests
-
-# Everything
-xcodebuild test \
-  -project Shallot.xcodeproj -scheme Shallot \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
-```
-
-Any iOS 18-or-later simulator works, but **which model names exist depends on
-the runtimes your Xcode ships** — `name=iPhone 16 Pro` fails on a machine whose
-newest runtime has no iPhone 16 Pro, because xcodebuild resolves the name
-against `OS:latest`. List what is actually there first:
-
-```sh
-xcodebuild -project Shallot.xcodeproj -scheme Shallot -showdestinations
-xcrun simctl list devices available
-```
-
-CI does exactly that and picks the last iPhone `-showdestinations` reports,
-which cannot be older than the deployment target. The adaptive shell has two
-distinct layouts, so it is worth running the UI suite against both size classes:
-
-```sh
--destination 'platform=iOS Simulator,name=iPhone 17 Pro'           # compact
--destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M4)'   # regular
-```
-
-The security suites in `ShallotTests/Security/` — the leak probes and the
-no-telemetry scan — are hermetic and run on every pull request: `WebKitLeakTests`
-builds a real `WKWebView` exactly as the app does and loads its probe pages from
-strings, so nothing leaves the machine, and `NoTelemetryTests` scans the shipping
-source for outbound-request APIs outside `TorKit` and `BrowserEngine`.
-
-The suites that would need a **live network** — real Tor bootstrap,
-`check.torproject.org` routing verification, `.onion` reachability, two-tab
-exit-IP isolation, and the published bypass proofs-of-concept — belong on a
-device lane. The convention is that any test type whose name contains `Live` or
-`Integration` is one of those: CI discovers them from the sources, skips them in
-the pull-request job and runs them only from the manually-triggered
-`live-integration` job. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
-No such suites exist in the tree yet, so that job currently reports that it has
-nothing to run.
-
-### Lint
-
-```sh
-swiftlint lint --strict                       # blocking gate; must be clean
-xcrun swift-format lint --recursive Packages/ShallotCore/Sources Shallot ShallotTests ShallotUITests
-```
-
-`.swiftlint.yml` is tuned so `--strict` passes with zero violations on this
-codebase; the rules that are off are off deliberately and each carries its
-reason in the file. `.swift-format` matches the code that is already here — four
-spaces, a 110-column target, multi-line string literals never reflowed, because
-`LeakMitigations.source(for:)` *is* the script that runs on the page. swift-format
-runs advisory rather than blocking: its pretty-printer disagrees with some
-hand-wrapped call sites and with the full-sentence strings shown to users, and
-reformatting security-critical files to satisfy a printer is not a trade worth
-making.
 
 ---
 
@@ -298,12 +247,15 @@ the Monitor's event log.
 turns the same features off inside the engine through `+[WKPreferences _features]`
 and `-[WKPreferences _setEnabled:forFeature:]` — SPI, not public API. The key
 strings move between releases, so it matches case-insensitive *fragments* rather
-than exact names, guards every call with a runtime `responds(to:)` check, never
-throws and never crashes, and returns an `Outcome` saying exactly what it managed
-to disable and what this OS did not expose. If it disables nothing at all the app
-is still protected; it simply protects at the JavaScript boundary rather than
-inside the engine. Every SPI name lives in that one file, so when Apple ships the
-OS-level fix there is one place to revisit.
+than exact names, guards every call with a runtime check, never throws and never
+crashes, and returns an `Outcome` saying exactly what it managed to disable and
+what this OS did not expose. If it disables nothing at all the app is still
+protected; it simply protects at the JavaScript boundary rather than inside the
+engine. Every SPI name lives in that one file, so when Apple ships the OS-level
+fix there is one place to revisit.
+
+**If you are reasoning about whether a leak is closed, reason about the user
+script.**
 
 Per-site opt-in re-enablement is available in Settings, off by default;
 `LeakMitigations.Configuration(settings:host:)` is where a user's exception is
@@ -312,19 +264,21 @@ resolved for a given host.
 ### Security levels and content blocking
 
 `BrowserEngine/SecurityPolicy.swift` maps `.standard | .safer | .safest` onto
-WebKit configuration. Safest sets `allowsContentJavaScript = false`, which on an
-engine we cannot patch is the strongest realistic anti-fingerprinting lever
-there is. All levels get autoplay off, picture-in-picture off and
-`upgradeKnownHostsToHTTPS`. `BrowserEngine/ContentBlocker.swift` compiles two
-`WKContentRuleList`s — a base list of third-party trackers plus `make-https`, and
-a strict list that additionally blocks remote fonts and third-party scripts —
-enforced below the JavaScript layer, which catches sub-resources that never
-reach the navigation delegate. The `make-https` rule deliberately excludes
-onion domains and top-level documents: an onion address already authenticates
-and encrypts the connection end to end and almost no onion service listens on
-443, so upgrading one does not add security, it breaks the page. Top-level
-navigation is `NavigationPolicy`'s job, because that is the only place that
-knows about the exemption.
+WebKit configuration; the shipping default is **Safer**. Safest sets
+`allowsContentJavaScript = false`, which on an engine we cannot patch is the
+strongest realistic anti-fingerprinting lever there is. All levels get autoplay
+off, picture-in-picture off and `upgradeKnownHostsToHTTPS`.
+`BrowserEngine/ContentBlocker.swift` compiles two `WKContentRuleList`s — a base
+list of third-party trackers plus `make-https`, and a strict list that
+additionally blocks remote fonts and third-party scripts — enforced below the
+JavaScript layer, which catches sub-resources that never reach the navigation
+delegate. It is not an ad blocker: every entry is a host that exists to follow
+people between sites. The `make-https` rule deliberately excludes onion domains
+and top-level documents: an onion address already authenticates and encrypts the
+connection end to end and almost no onion service listens on 443, so upgrading
+one does not add security, it breaks the page. Top-level navigation is
+`NavigationPolicy`'s job, because that is the only place that knows about the
+exemption.
 
 ### Chrome
 
@@ -361,33 +315,127 @@ resolved on-device, so relay country labels in the Monitor cost no network call.
 ### Everything else
 
 - **Persistence** — `Persistence/` stores favourites and settings only, via
-  SwiftData, with `FileProtectionType.complete` applied to the store file and
-  its sidecars (SwiftData has no API for this, so `ShallotModelContainer` sets
-  the protection class directly). No browsing history is ever written; cookies,
-  cache, page data, tabs and monitor logs are all in-memory. No cloud sync: sync
-  is a deanonymisation surface.
+  SwiftData, with `FileProtectionType.complete` applied to the store directory
+  and to the store file and its `-wal`/`-shm` sidecars (SwiftData has no API for
+  this, so `ShallotModelContainer` sets the protection class directly). A seized,
+  locked device yields nothing — not even the list of onion services someone
+  thought worth saving. No browsing history is ever written; cookies, cache, page
+  data, tabs and monitor logs are all in-memory. No cloud sync: sync is a
+  deanonymisation surface.
 - **App lock** — `AppLock/AppLockService.swift` gates entry with Face ID, Touch
   ID or the device passcode; `DesignSystem/PrivacyShield.swift` covers the app
   when the scene goes inactive so the app-switcher snapshot never shows a page.
   `NSFaceIDUsageDescription` is in `Info.plist`.
 - **Monitoring** — `Monitoring/MonitorService.swift` aggregates circuit chain,
-  bootstrap progress, bandwidth and the security-event log. All computed locally.
-  No telemetry, no analytics, no crash reporting: there is no network egress
-  except Tor's own and loopback.
+  bootstrap progress, bandwidth and the security-event log. All computed locally,
+  into a bounded in-memory ring buffer. No telemetry, no analytics, no crash
+  reporting: there is no network egress except Tor's own and loopback.
 - **Transport security** — ATS stays on for the app's own networking.
   `NSAllowsArbitraryLoadsInWebContent` is set because onion services almost never
   serve TLS and a browser that cannot load `http://` is not a browser; Shallot's
   own HTTPS-only mode, on by default and implemented in `NavigationPolicy`, is
   the control that actually governs insecure page loads.
 
+---
+
+## Build and run
+
+**Requirements:** Xcode 26 or later, Swift 6 with strict concurrency, an iOS 18
+or later simulator or device.
+
+```sh
+git clone https://github.com/cristianexer/Shallot.git
+cd Shallot
+open Shallot.xcodeproj      # packages resolve on first open
+```
+
+or from the command line:
+
+```sh
+xcodebuild -project Shallot.xcodeproj -scheme Shallot -resolvePackageDependencies
+xcodebuild -project Shallot.xcodeproj -scheme Shallot \
+  -destination 'generic/platform=iOS Simulator' build
+```
+
+The first resolve builds the embedded Tor C library and OpenSSL from source and
+takes several minutes. Subsequent builds reuse it; CI caches it.
+
+**A note on the deployment target.** The build spec asks for iOS 17, because
+that is the floor for `proxyConfigurations`, SwiftData and `@Observable`. The
+shipping floor is **iOS 18**, forced by `swift-tor` declaring `.iOS(.v18)` in
+its own manifest — and an embedded Tor is not something this app can do without.
+`Packages/ShallotCore/Package.swift` records this in a named constant, `iOSFloor`,
+so the reason travels with the decision, and `IPHONEOS_DEPLOYMENT_TARGET` on the
+app target matches at 18.0.
+
+Signing is standard automatic signing; the in-app proxy route needs **no special
+entitlement**, because `proxyConfigurations` is public API. Only a system-wide
+`NEPacketTunnelProvider` tunnel — explicitly out of scope — would need the
+Network Extension entitlement.
+
+Run on a **real device** for anything touching Tor or networking. The Simulator
+uses the macOS networking stack and will mislead you about proxy and TLS
+behaviour.
+
+---
+
+## Tests
+
+Every suite that runs by default is hermetic: `AppContainer` detects a test
+host and swaps in `MockTorService` and an in-memory store, so nothing below
+needs the Tor network. The one exception is `LiveTorIntegrationTests`, which is
+opt-in and covered further down.
+
+```sh
+# Unit, logic and security suites (Swift Testing)
+xcodebuild test \
+  -project Shallot.xcodeproj -scheme Shallot \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -only-testing:ShallotTests
+
+# UI suites (XCUITest)
+xcodebuild test \
+  -project Shallot.xcodeproj -scheme Shallot \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -only-testing:ShallotUITests
+
+# Everything
+xcodebuild test \
+  -project Shallot.xcodeproj -scheme Shallot \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+```
+
+Any iOS 18-or-later simulator works, but **which model names exist depends on
+the runtimes your Xcode ships** — `name=iPhone 16 Pro` fails on a machine whose
+newest runtime has no iPhone 16 Pro, because xcodebuild resolves the name
+against `OS:latest`. List what is actually there first:
+
+```sh
+xcodebuild -project Shallot.xcodeproj -scheme Shallot -showdestinations
+xcrun simctl list devices available
+```
+
+CI does exactly that and picks the last iPhone `-showdestinations` reports,
+which cannot be older than the deployment target. The adaptive shell has two
+distinct layouts, so it is worth running the UI suite against both size classes:
+
+```sh
+-destination 'platform=iOS Simulator,name=iPhone 17 Pro'           # compact
+-destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M4)'   # regular
+```
+
+Anything whose test or suite name contains `Live` or `Integration` needs the
+real network. CI discovers those from the sources, skips them in the
+pull-request job and runs them only from the manually-triggered
+`live-integration` job, alongside the performance suite. See
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml). Naming a new suite
+correctly is the whole of wiring it up.
+
 ### The live suite
 
 `ShallotTests/Security/LiveTorIntegrationTests.swift` is the one suite that
-talks to the real Tor network. It bootstraps a real Tor and asserts what the app
-actually promises: that `check.torproject.org` reports `IsTor` true with an
-address that is not this machine's — including through the app's own
-`WKWebView`, not just a `URLSession` standing in for it — that two tabs leave by
-two different exit relays, and that an onion service loads.
+talks to the real Tor network — see [Verified, not asserted](#verified-not-asserted)
+for what it actually checks.
 
 It is skipped unless switched on. `xcodebuild` does not forward its own
 environment into a test host running in the simulator, so the switch is a marker
@@ -403,17 +451,85 @@ xcodebuild test \
 ```
 
 `-parallel-testing-enabled NO` matters: parallel clones would each start their
-own Tor and race for the same public endpoint. Setting `SHALLOT_LIVE_TESTS=1`
-works too where the environment does reach the test host. CI runs this on a
-manual job, never on a pull request — Tor exit traffic from shared runners is
-frequently blocked or captcha'd, and a flaky gate is one people learn to ignore.
+own Tor and race for the same public endpoint. The suite is `.serialized` and
+shares one Tor across its tests for the same reason — a second `start()` in one
+process is not a fresh Tor, it is undefined behaviour. Setting
+`SHALLOT_LIVE_TESTS=1` works too where the environment does reach the test host.
+CI runs this on a manual job, never on a pull request: Tor exit traffic from
+shared runners is frequently blocked or captcha'd, and a flaky gate is one people
+learn to ignore.
+
+### Lint
+
+```sh
+swiftlint lint --strict                       # blocking gate; must be clean
+xcrun swift-format lint --recursive Packages/ShallotCore/Sources Shallot ShallotTests ShallotUITests
+```
+
+`.swiftlint.yml` is tuned so `--strict` passes with zero violations on this
+codebase; the rules that are off are off deliberately and each carries its
+reason in the file. `.swift-format` matches the code that is already here — four
+spaces, a 110-column target, multi-line string literals never reflowed, because
+`LeakMitigations.source(for:)` *is* the script that runs on the page. swift-format
+runs advisory rather than blocking: its pretty-printer disagrees with some
+hand-wrapped call sites and with the full-sentence strings shown to users, and
+reformatting security-critical files to satisfy a printer is not a trade worth
+making.
+
+---
+
+## Threat model
+
+Short, because a threat model that nobody finishes reading protects nobody.
+
+**Shallot is designed to stop:**
+
+- your ISP, your mobile carrier, your employer's or a café's Wi-Fi seeing which
+  sites you visit — they see a Tor connection and nothing about its contents;
+- the sites you visit learning your real IP address or approximate location;
+- two tabs being trivially linked to one another, because each has its own
+  circuit, its own exit relay and its own cookie jar;
+- cross-site trackers following you between pages, via the content rule lists;
+- the leaky WebKit features described above resolving DNS or opening a
+  connection outside Tor;
+- anything at all reaching the network while Tor is down;
+- someone who picks up or seizes your locked device recovering your browsing —
+  there is no history on disk, and favourites and settings are unreadable while
+  the device is locked;
+- Shallot itself learning anything about you: there is no analytics, no crash
+  reporting and no server of any kind behind this app.
+
+**Shallot cannot protect you from:**
+
+- **a compromised device.** Malware, a jailbreak, a coerced unlock or someone
+  who knows your passcode defeats everything here. Anonymity software assumes
+  the endpoint is yours.
+- **logging in.** Sign into a personal account, or type something only you would
+  write, and you have identified yourself over a perfectly anonymous connection.
+  Tor cannot unsay it.
+- **a global adversary who can watch both ends.** Traffic-confirmation by
+  correlating timing and volume at entry and exit is a limitation of Tor's design
+  and is out of Shallot's hands. It is also out of desktop Tor Browser's.
+- **browser fingerprinting.** This is the honest weak point. Because iOS forbids
+  third-party engines, Shallot cannot make every install look alike the way
+  desktop Tor Browser tries to. Canvas, WebGL, fonts and screen metrics still
+  largely reflect your device, and a determined site can build a distinguishing
+  fingerprint. Security level **Safest** turns JavaScript off, which removes most
+  of that surface — it is the strongest control the platform allows.
+- **someone watching you use the app.** The privacy shield covers the
+  app-switcher snapshot; it cannot cover a shoulder.
+
+If your safety depends on not being fingerprinted, use desktop Tor Browser on a
+computer you control. If it depends on your network and the sites you visit not
+knowing who or where you are, that is what this app is for.
 
 ---
 
 ## Deliberate limitations
 
 These are decisions, not bugs. Each one is recorded here so nobody has to
-rediscover it from the source.
+rediscover it from the source — and several of them are the best places to
+start contributing.
 
 **obfs4 and Snowflake do not work in this build.** Both are Go programs that on
 iOS are linked in as a framework (IPtProxy is the usual one) running in-process
@@ -433,8 +549,7 @@ uses guarded WebKit SPI whose keys move between releases and may simply not be
 listed on a given OS. It is a genuine second line of defence when it works, and
 it reports honestly when it does not. The **guaranteed** layer is the
 `.atDocumentStart` user script in `LeakMitigations`, which runs in every frame
-before any page script. If you are reasoning about whether a leak is closed,
-reason about the user script.
+before any page script.
 
 **`ITSAppUsesNonExemptEncryption` is declared `true`.** Tor is encryption, and an
 anonymity proxy is not one of the exempt categories. This means **export-compliance
@@ -462,9 +577,55 @@ into the test target or fixing the upstream `libcrypto`/`libssl` split — neith
 is a five-minute job, and pretending otherwise in a comment would be worse than
 saying so here.
 
+**The interface is English only.** Every user-facing string is a literal in the
+source rather than a localised resource, which is a real gap for an app whose
+users are disproportionately outside the anglophone world.
+
 **Out of scope, deliberately:** system-wide tunnelling of other apps via
 `NEPacketTunnelProvider` (would need the Network Extension entitlement), cloud
 sync of anything, and any platform other than iOS and iPadOS.
+
+---
+
+## Contributing
+
+Contributions are welcome. Please read **[CONTRIBUTING.md](CONTRIBUTING.md)**
+first — it covers the module graph and the rule that dependencies point
+downward, the commenting and British-English conventions, Swift 6 strict
+concurrency, how to run each suite, and the handful of constraints that must not
+be broken. Everyone taking part is expected to follow the
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
+If you have found something that can leak a real IP address or DNS query, **do
+not open a public issue** — see [SECURITY.md](SECURITY.md).
+
+Good places to start, each of them a limitation above with a seam already cut
+for it:
+
+- **Wire `PluggableTransportProviding` to IPtProxy.** The protocol, the
+  `torrc` `ClientTransportPlugin` line and the Settings availability plumbing all
+  exist; what is missing is an implementation and a decision about shipping the
+  binary. This is the single highest-value change in the list, because it is what
+  makes Shallot usable from a censored network.
+- **Restore snapshot testing.** Either vendor `swift-snapshot-testing`'s source
+  into the test target or solve the `libcrypto`/`libssl` link failure properly.
+  Not a small job, but a well-defined one, and it would cover the Dynamic Type
+  and Reduce Motion cases the UI suites only sample.
+- **More leak-test coverage.** `WebKitLeakTests` is the app's evidence. Probes
+  for service workers, `<link rel="preload">`, WebSockets, beacon and
+  `EventSource`, plus adversarial pages that try to capture a reference to a
+  removed API before the document-start script runs, all belong there.
+- **Localisation.** Move the user-facing strings out of the source and into
+  string catalogues, then translate. The honesty statement in Settings and the
+  error-page copy in `NavigationPolicy` need particular care: they must stay
+  exactly as truthful in every language.
+- **Accessibility.** The XCUITest audits pass, but VoiceOver ergonomics on the
+  Monitor's circuit view and the tab overview would benefit from someone who
+  actually uses VoiceOver every day.
+
+Smaller and just as welcome: additions to `ContentBlocker.trackerHosts`, better
+error copy, and any test that turns an assumption in the code into something the
+suite checks.
 
 ---
 
@@ -474,13 +635,36 @@ sync of anything, and any platform other than iOS and iPadOS.
 Shallot/                 app target — entry point, composition root, ⌘-shortcuts,
                          Assets.xcassets, bundled geoip/geoip6
 Packages/ShallotCore/    the eight core modules
-ShallotTests/            Swift Testing suites (Unit/; Security/ is where the
-                         live leak suites land — empty in this build)
-ShallotUITests/          XCUITest suites
+ShallotTests/            Swift Testing suites — Unit/, Security/ (leak probes,
+                         the no-telemetry scan, the live Tor suite), Performance/
+ShallotUITests/          XCUITest suites, including the screenshot generator
 Tools/make-app-icon.py   regenerates Assets.xcassets/AppIcon.appiconset/icon-1024.png
 Tools/make-banner.py     regenerates docs/banner.gif — the README banner, a port
                          of DesignSystem/RainView.swift to Pillow
-docs/banner.gif          the animated banner at the top of this file
+docs/                    the banner and the screenshots at the top of this file
 .github/workflows/ci.yml build, test and lint on every PR; live suites on demand
 desing files/            the build spec this was implemented against
 ```
+
+---
+
+## Credits
+
+- **[The Tor Project](https://www.torproject.org)**, for the network, the client
+  and thirty years of the research that makes any of this possible. Shallot is
+  an independent project and is not affiliated with or endorsed by the Tor
+  Project. If Shallot is useful to you, [donate to
+  them](https://donate.torproject.org) rather than to me.
+- **[`swift-tor`](https://github.com/21-DOT-DEV/swift-tor) by 21-DOT-DEV**, the
+  concurrency-first Swift wrapper around the Tor C library that the whole of
+  `TorKit` is built on.
+- **[Mysk](https://mysk.blog)** — Talal Haj Bakry and Tommy Mysk — whose
+  [research into WebKit's proxy
+  bypasses](https://mysk.blog/2026/08/04/webkit-proxy-icloud-private-relay-ip-leak/)
+  is the reason `LeakMitigations` exists. Every iOS proxy and Tor browser was
+  affected; finding it and publishing it clearly is what let the rest of us fix
+  it.
+
+## Licence
+
+[MIT](LICENSE). Copyright (c) 2026 Daniel Fat.

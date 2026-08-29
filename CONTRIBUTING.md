@@ -50,8 +50,9 @@ Features ──▶ DesignSystem ──▶ Domain
 ```
 
 **Dependencies point downward, always.** `Domain` holds models, protocols and
-pure logic — no implementations, no UIKit, no WebKit, no Tor. Nothing above
-`Domain` may import a concrete implementation of anything else; the app wires
+pure logic, plus the test doubles that implement those protocols for previews
+and tests — and no framework types at all: no UIKit, no WebKit, no Tor. Nothing
+above `Domain` may import a concrete implementation of anything else; the app wires
 the concrete types together at launch in `Shallot/AppContainer.swift`, which is
 the single place that knows which Tor library, which storage engine and which
 authentication framework are in use.
@@ -105,7 +106,8 @@ are deliberately free of framework types so their behaviour is tested directly
 rather than through a live web view. Keep new policy code in that shape.
 
 **Doc comments** are `///`, and every public type gets one that says what it is
-for, not what it is. Blocks of `/* */` are banned by the formatter.
+for, not what it is. `/* */` blocks are flagged by the formatter and are not
+used anywhere in the Swift sources.
 
 ## Linting
 

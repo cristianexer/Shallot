@@ -47,7 +47,7 @@ public struct MonitorView: View {
     /// keeps your session, the other ends it. Putting the difference on the
     /// control is cheaper than making someone find out by pressing it.
     private var actions: some View {
-        HStack(spacing: 10) {
+        HStack(alignment: .top, spacing: 10) {
             action(
                 symbol: "arrow.triangle.2.circlepath",
                 title: "New circuit",
@@ -66,6 +66,7 @@ public struct MonitorView: View {
                 await model.requestNewIdentity()
             }
         }
+        .fixedSize(horizontal: false, vertical: true)
         .disabled(model.isWorking)
         .opacity(model.isWorking ? 0.6 : 1)
     }
@@ -95,7 +96,9 @@ public struct MonitorView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // Both cards take the height of the taller one, so a longer
+            // explanation does not leave the pair looking misaligned.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(12)
             .frame(minHeight: Metrics.minimumTouchTarget)
             .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
