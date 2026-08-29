@@ -40,7 +40,7 @@ ASH = (163, 119, 127)
 
 # ---- DesignSystem/RainView.swift -----------------------------------------
 GLYPHS = list("ｱｲｳｴｵｶｷｸｹｺｻｼｽｾﾀﾁﾂﾃﾅﾆﾇﾊﾋﾌﾍﾎ0123456789ABCDEFxX#<>/█▓")
-CELL = 22
+CELL = 18
 TRAIL = 7
 RAIN_OPACITY = 0.55   # RainView's own .opacity(0.55)
 FLICKER_HZ = 11
@@ -99,22 +99,21 @@ def make_backdrop():
 
 
 def make_vignette():
-    """Darkens the edges so the glass-layer type reads against the rain —
-    ShallotBackdrop's radial gradient, adapted to a wide frame."""
+    """Darkens the edges so type reads against the rain — ShallotBackdrop's
+    radial gradient, adapted to a wide frame."""
+    radial = Image.radial_gradient("L").resize((WIDTH, HEIGHT), Image.BILINEAR)
+    return radial.point(lambda v: min(255, round(238 * (v / 255) ** 1.7)))
+
+
+def make_plate():
+    """The quiet band the wordmark sits on. In the app this is a glass panel;
+    here it is the same idea reduced to a soft darkening, so the type keeps its
+    contrast without the rain being cut off behind a hard edge."""
     mask = Image.new("L", (WIDTH, HEIGHT), 0)
-    draw = ImageDraw.Draw(mask)
-    steps = 90
-    for i in range(steps):
-        t = i / (steps - 1)
-        inset_x = WIDTH * 0.5 * t
-        inset_y = HEIGHT * 0.62 * t
-        draw.ellipse(
-            [inset_x - WIDTH * 0.10, inset_y - HEIGHT * 0.18,
-             WIDTH - inset_x + WIDTH * 0.10, HEIGHT - inset_y + HEIGHT * 0.18],
-            fill=round(235 * (1 - t) ** 1.6),
-        )
-    mask = Image.eval(mask, lambda v: 235 - v)
-    return mask.filter(ImageFilter.GaussianBlur(40))
+    ImageDraw.Draw(mask).ellipse(
+        [WIDTH * 0.12, HEIGHT * 0.16, WIDTH * 0.88, HEIGHT * 0.90], fill=178
+    )
+    return mask.filter(ImageFilter.GaussianBlur(70))
 
 
 def tracked(draw, text, font, x, y, fill, tracking):
@@ -153,8 +152,8 @@ def make_wordmark():
     glow_draw = ImageDraw.Draw(glow)
     tracked(glow_draw, title, title_font, (WIDTH - title_width) / 2, title_y,
             ARTERIAL + (255,), tracking)
-    glow = glow.filter(ImageFilter.GaussianBlur(26))
-    glow.putalpha(glow.getchannel("A").point(lambda v: min(255, int(v * 1.9))))
+    glow = glow.filter(ImageFilter.GaussianBlur(42))
+    glow.putalpha(glow.getchannel("A").point(lambda v: min(255, int(v * 2.1))))
 
     # A hairline rule either side of the tagline, in the app's accent.
     rule_y = round(tag_y + 12)
@@ -210,8 +209,10 @@ def make_rain(seconds):
 def main():
     backdrop = make_backdrop()
     vignette = make_vignette()
+    plate = make_plate()
     wordmark = make_wordmark()
     shadow = Image.new("RGB", (WIDTH, HEIGHT), VOID_DEEP)
+    plate_colour = Image.new("RGB", (WIDTH, HEIGHT), (14, 3, 8))
 
     frames = []
     for index in range(FRAMES):
@@ -219,6 +220,7 @@ def main():
         frame = backdrop.copy()
         frame.paste(Image.alpha_composite(frame.convert("RGBA"), make_rain(seconds)).convert("RGB"))
         frame = Image.composite(shadow, frame, vignette)
+        frame = Image.composite(plate_colour, frame, plate)
         frame = Image.alpha_composite(frame.convert("RGBA"), wordmark).convert("RGB")
         frames.append(frame.quantize(colors=96, method=Image.MEDIANCUT, dither=Image.Dither.NONE))
 

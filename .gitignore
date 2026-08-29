@@ -28,3 +28,7 @@ Icon?
 
 # Local tooling
 *.log
+
+# Python (Tools/)
+__pycache__/
+*.pyc

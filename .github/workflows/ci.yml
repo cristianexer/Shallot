@@ -14,11 +14,6 @@ env:
   DEVELOPER_DIR: /Applications/Xcode_26.app/Contents/Developer
   PROJECT: Shallot.xcodeproj
   SCHEME: Shallot
-  # The simulator is picked at run time rather than pinned by name: which
-  # iPhone models exist depends on the runtime the runner's Xcode ships, and a
-  # hard-coded name breaks silently when that moves. Any simulator running iOS
-  # 18 or later will do — iOS 18 is the deployment floor, forced by swift-tor
-  # declaring .iOS(.v18).
   # Signing is off for simulator builds; CI has no certificates and does not
   # need any, because the in-app proxy route needs no entitlement.
   UNSIGNED: >-
@@ -70,12 +65,17 @@ jobs:
           xcodebuild -project "$PROJECT" -scheme "$SCHEME" \
             -resolvePackageDependencies
 
-      # -showdestinations only lists simulators the deployment target can
-      # actually run on, so this cannot pick something older than iOS 18.
+      # The simulator is discovered rather than pinned by name: which iPhone
+      # models exist depends on the runtime the runner's Xcode ships, and a
+      # hard-coded name fails outright the moment that moves, because xcodebuild
+      # resolves a bare name against OS:latest. -showdestinations only lists
+      # simulators the deployment target can run on, so this can never pick
+      # something older than iOS 18 — the floor forced by swift-tor's .iOS(.v18).
       - name: Pick a simulator
         id: sim
         run: |
           udid=$(xcodebuild -project "$PROJECT" -scheme "$SCHEME" -showdestinations 2>/dev/null \
+            | sed -n '/Available destinations/,/Ineligible destinations/p' \
             | grep 'platform:iOS Simulator' \
             | grep 'name:iPhone' \
             | grep -v 'placeholder' \
@@ -85,12 +85,15 @@ jobs:
             echo "::error::No iOS simulator available on this runner."
             exit 1
           fi
+          echo "Using simulator $udid"
           echo "destination=platform=iOS Simulator,id=$udid" >> "$GITHUB_OUTPUT"
 
-      - name: Build
+      # build-for-testing, not plain build: it compiles the app and both test
+      # bundles once, and the two test steps below then only run them.
+      - name: Build for testing
         run: |
           set -o pipefail
-          xcodebuild build \
+          xcodebuild build-for-testing \
             -project "$PROJECT" -scheme "$SCHEME" \
             -destination "${{ steps.sim.outputs.destination }}" \
             -derivedDataPath DerivedData \
@@ -130,7 +133,7 @@ jobs:
       - name: UI tests (ShallotUITests)
         run: |
           set -o pipefail
-          xcodebuild test \
+          xcodebuild test-without-building \
             -project "$PROJECT" -scheme "$SCHEME" \
             -destination "${{ steps.sim.outputs.destination }}" \
             -derivedDataPath DerivedData \
@@ -228,12 +231,17 @@ jobs:
       - name: Resolve packages
         run: xcodebuild -project "$PROJECT" -scheme "$SCHEME" -resolvePackageDependencies
 
-      # -showdestinations only lists simulators the deployment target can
-      # actually run on, so this cannot pick something older than iOS 18.
+      # The simulator is discovered rather than pinned by name: which iPhone
+      # models exist depends on the runtime the runner's Xcode ships, and a
+      # hard-coded name fails outright the moment that moves, because xcodebuild
+      # resolves a bare name against OS:latest. -showdestinations only lists
+      # simulators the deployment target can run on, so this can never pick
+      # something older than iOS 18 — the floor forced by swift-tor's .iOS(.v18).
       - name: Pick a simulator
         id: sim
         run: |
           udid=$(xcodebuild -project "$PROJECT" -scheme "$SCHEME" -showdestinations 2>/dev/null \
+            | sed -n '/Available destinations/,/Ineligible destinations/p' \
             | grep 'platform:iOS Simulator' \
             | grep 'name:iPhone' \
             | grep -v 'placeholder' \
@@ -243,6 +251,7 @@ jobs:
             echo "::error::No iOS simulator available on this runner."
             exit 1
           fi
+          echo "Using simulator $udid"
           echo "destination=platform=iOS Simulator,id=$udid" >> "$GITHUB_OUTPUT"
 
       # The convention: any test type whose name contains "Live" or

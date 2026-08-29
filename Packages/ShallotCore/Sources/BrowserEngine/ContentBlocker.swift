@@ -55,10 +55,24 @@ public enum ContentBlocker {
 
         if httpsOnly {
             // `make-https` runs inside WebKit, ahead of the navigation
-            // delegate, so it also covers images, scripts and XHR — the places
-            // a mixed-content downgrade actually happens.
+            // delegate, so it covers images, scripts and XHR — the places a
+            // mixed-content downgrade actually happens.
+            //
+            // Two deliberate exclusions:
+            //
+            // * `document` is absent. Top-level navigation is `NavigationPolicy`'s
+            //   job, because only it knows about the onion exemption and about
+            //   not looping when a site has no HTTPS listener.
+            // * `unless-domain` keeps onion services out of it entirely. An
+            //   onion address already authenticates and encrypts the connection
+            //   end to end, and almost no onion service listens on 443 — so
+            //   upgrading one does not add security, it just breaks the page.
             rules.append([
-                "trigger": ["url-filter": ".*", "resource-type": ["document", "image", "style-sheet", "script", "font", "media", "fetch", "raw", "svg-document"]],
+                "trigger": [
+                    "url-filter": ".*",
+                    "resource-type": ["image", "style-sheet", "script", "font", "media", "fetch", "raw", "svg-document"],
+                    "unless-domain": ["*onion"],
+                ],
                 "action": ["type": "make-https"],
             ])
         }

@@ -221,6 +221,23 @@ struct ContentBlockerTests {
         #expect(!ContentBlocker.baseRules(httpsOnly: false).contains("make-https"))
     }
 
+    @Test("The upgrade rule leaves onion services and top-level navigation alone")
+    func upgradeRuleExemptsOnionAndDocuments() throws {
+        // Upgrading an onion URL breaks it: the address already authenticates
+        // and encrypts the connection, and onion services rarely serve 443.
+        // Top-level navigation belongs to NavigationPolicy, which knows that.
+        let json = ContentBlocker.baseRules(httpsOnly: true)
+        let rules = try #require(
+            try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [[String: Any]]
+        )
+        let upgrade = try #require(
+            rules.first { ($0["action"] as? [String: String])?["type"] == "make-https" }
+        )
+        let trigger = try #require(upgrade["trigger"] as? [String: Any])
+        #expect((trigger["unless-domain"] as? [String])?.contains("*onion") == true)
+        #expect((trigger["resource-type"] as? [String])?.contains("document") == false)
+    }
+
     @Test("Tracker filters match the host and its subdomains, third-party only")
     func trackerFilters() {
         let filter = ContentBlocker.urlFilter(forHost: "doubleclick.net")

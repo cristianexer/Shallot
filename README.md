@@ -1,3 +1,5 @@
+![Shallot](docs/banner.gif)
+
 # Shallot
 
 A Tor browser for iPhone and iPad. Universal SwiftUI app, embedded Tor, every
@@ -109,7 +111,7 @@ or from the command line:
 ```sh
 xcodebuild -project Shallot.xcodeproj -scheme Shallot -resolvePackageDependencies
 xcodebuild -project Shallot.xcodeproj -scheme Shallot \
-  -destination 'platform=iOS Simulator,name=iPhone 16 Pro' build
+  -destination 'generic/platform=iOS Simulator' build
 ```
 
 The first resolve builds the embedded Tor C library and OpenSSL from source and
@@ -140,43 +142,58 @@ Every suite is hermetic: `AppContainer` swaps in `MockTorService` and an
 in-memory store under test, so nothing below needs the Tor network.
 
 ```sh
-# Unit and logic suites (Swift Testing)
+# Unit, logic and security suites (Swift Testing)
 xcodebuild test \
   -project Shallot.xcodeproj -scheme Shallot \
-  -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   -only-testing:ShallotTests
 
 # UI suites (XCUITest)
 xcodebuild test \
   -project Shallot.xcodeproj -scheme Shallot \
-  -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   -only-testing:ShallotUITests
 
 # Everything
 xcodebuild test \
   -project Shallot.xcodeproj -scheme Shallot \
-  -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
-Any iOS 18-or-later simulator works. The adaptive shell has two distinct
-layouts, so it is worth running the UI suite against both size classes:
+Any iOS 18-or-later simulator works, but **which model names exist depends on
+the runtimes your Xcode ships** — `name=iPhone 16 Pro` fails on a machine whose
+newest runtime has no iPhone 16 Pro, because xcodebuild resolves the name
+against `OS:latest`. List what is actually there first:
 
 ```sh
--destination 'platform=iOS Simulator,name=iPhone 16 Pro'      # compact
+xcodebuild -project Shallot.xcodeproj -scheme Shallot -showdestinations
+xcrun simctl list devices available
+```
+
+CI does exactly that and picks the last iPhone `-showdestinations` reports,
+which cannot be older than the deployment target. The adaptive shell has two
+distinct layouts, so it is worth running the UI suite against both size classes:
+
+```sh
+-destination 'platform=iOS Simulator,name=iPhone 17 Pro'           # compact
 -destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M4)'   # regular
 ```
 
-`xcodebuild -project Shallot.xcodeproj -list` prints the current destinations
-and schemes; `xcrun simctl list devices available` prints the simulators
-actually installed on the machine.
+The security suites in `ShallotTests/Security/` — the leak probes and the
+no-telemetry scan — are hermetic and run on every pull request: `WebKitLeakTests`
+builds a real `WKWebView` exactly as the app does and loads its probe pages from
+strings, so nothing leaves the machine, and `NoTelemetryTests` scans the shipping
+source for outbound-request APIs outside `TorKit` and `BrowserEngine`.
 
-The suites that need a live network — real Tor bootstrap, `check.torproject.org`
-routing verification, `.onion` reachability, two-tab exit-IP isolation, and the
-WebKit bypass proofs-of-concept — are named with a `Live` or `Integration`
-prefix and are **not** part of the pull-request lane. See
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml); they run from the
-manually-triggered `live-integration` job, and belong on a device lane once one
-exists.
+The suites that would need a **live network** — real Tor bootstrap,
+`check.torproject.org` routing verification, `.onion` reachability, two-tab
+exit-IP isolation, and the published bypass proofs-of-concept — belong on a
+device lane. The convention is that any test type whose name contains `Live` or
+`Integration` is one of those: CI discovers them from the sources, skips them in
+the pull-request job and runs them only from the manually-triggered
+`live-integration` job. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+No such suites exist in the tree yet, so that job currently reports that it has
+nothing to run.
 
 ### Lint
 
@@ -387,6 +404,9 @@ ShallotTests/            Swift Testing suites (Unit/; Security/ is where the
                          live leak suites land — empty in this build)
 ShallotUITests/          XCUITest suites
 Tools/make-app-icon.py   regenerates Assets.xcassets/AppIcon.appiconset/icon-1024.png
+Tools/make-banner.py     regenerates docs/banner.gif — the README banner, a port
+                         of DesignSystem/RainView.swift to Pillow
+docs/banner.gif          the animated banner at the top of this file
 .github/workflows/ci.yml build, test and lint on every PR; live suites on demand
 desing files/            the build spec this was implemented against
 ```

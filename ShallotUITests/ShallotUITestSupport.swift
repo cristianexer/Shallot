@@ -174,6 +174,7 @@ extension XCUIApplication {
 func waitUntil(
     _ description: String,
     timeout: TimeInterval = Timeout.element,
+    diagnostic: () -> String = { "" },
     file: StaticString = #filePath,
     line: UInt = #line,
     condition: () -> Bool
@@ -184,7 +185,13 @@ func waitUntil(
         _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.2))
     }
     if condition() { return true }
-    XCTFail("Timed out after \(timeout)s waiting until \(description).", file: file, line: line)
+    let extra = diagnostic()
+    XCTFail(
+        "Timed out after \(timeout)s waiting until \(description)."
+            + (extra.isEmpty ? "" : " \(extra)"),
+        file: file,
+        line: line
+    )
     return false
 }
 

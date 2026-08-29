@@ -91,7 +91,13 @@ final class BrowserUITests: XCTestCase {
 
         // Adding dismisses the sheet, so the count is read back from the
         // toolbar button's accessibility value.
-        waitUntil("the tab count reaches two after tapping \(tapped)") {
+        waitUntil(
+            "the tab count reaches two after tapping \(tapped)",
+            diagnostic: {
+                "The tabs button reads \(app.tabCountDescription ?? "nothing"); "
+                    + "the overview is \(app.navigationBars["Tabs"].exists ? "still open" : "closed")."
+            }
+        ) {
             app.tabCountDescription == "2 open"
         }
     }
@@ -102,7 +108,13 @@ final class BrowserUITests: XCTestCase {
 
         app.openTabOverview()
         let tapped = app.tapAddTabButton()
-        waitUntil("the tab count reaches two after tapping \(tapped)") {
+        waitUntil(
+            "the tab count reaches two after tapping \(tapped)",
+            diagnostic: {
+                "The tabs button reads \(app.tabCountDescription ?? "nothing"); "
+                    + "the overview is \(app.navigationBars["Tabs"].exists ? "still open" : "closed")."
+            }
+        ) {
             app.tabCountDescription == "2 open"
         }
 
@@ -220,7 +232,13 @@ extension XCUIApplication {
             )
             return "nothing"
         }
-        button.tap()
+
+        // Tapped near the leading edge rather than in the middle. The row is
+        // `Image + Text + Spacer` inside a `.buttonStyle(.plain)` button with no
+        // `contentShape`, and on iOS 26 its Liquid Glass background is not
+        // hit-testable, so the centre of the row — which is over the spacer —
+        // does nothing. Everything left of the spacer works.
+        button.coordinate(withNormalizedOffset: CGVector(dx: 0.18, dy: 0.5)).tap()
         return "the button at \(chosenFrame) of candidates \(considered)"
     }
 }

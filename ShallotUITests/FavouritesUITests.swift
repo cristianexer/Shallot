@@ -2,8 +2,13 @@ import XCTest
 
 /// Favourites: adding one by hand, and removing it again.
 ///
-/// In UI-testing mode the store is in memory, so every launch starts with
-/// nothing saved and the empty state is the expected first screen.
+/// Note on the starting state. The store is in memory in UI-testing mode, so
+/// nothing survives a launch — but `AppContainer.seedFirstRunFavourites()` is
+/// guarded by a *persisted* flag that is also in memory, so it reads as unset
+/// on every launch and the seven first-run clearnet favourites are installed
+/// again each time. These tests therefore assert about the favourite they add
+/// themselves and never about the list being empty, which is both the honest
+/// state of the app and the only stable one.
 final class FavouritesUITests: XCTestCase {
 
     override func setUpWithError() throws {
@@ -11,13 +16,22 @@ final class FavouritesUITests: XCTestCase {
     }
 
     @MainActor
-    func testFavouritesStartsEmpty() {
+    func testFavouritesShowsItsHeaderAndItsWarning() {
         let app = launchShallot()
         app.show(.favourites)
 
+        XCTAssertTrue(app.staticTexts["FAVOURITES"].exists)
         XCTAssertTrue(
-            app.staticTexts["Nothing saved yet"].waitForExistence(timeout: Timeout.element),
-            "An in-memory store should start with no favourites."
+            app.buttons["Add a favourite"].waitForExistence(timeout: Timeout.element),
+            "There should always be a way to add a favourite by hand."
+        )
+        // The screen leads with the reason a saved onion address is worth more
+        // than a fresh link; losing that would be a substantive regression.
+        XCTAssertTrue(
+            app.staticTexts.matching(
+                NSPredicate(format: "label BEGINSWITH 'Onion addresses can change or be spoofed'")
+            ).firstMatch.exists,
+            "The verify-before-trusting advice should be on the screen."
         )
     }
 
@@ -54,7 +68,7 @@ final class FavouritesUITests: XCTestCase {
             "The empty state should give way once something is saved."
         )
         XCTAssertTrue(
-            app.staticTexts["Onion services"].exists,
+            app.staticTexts.matching(NSPredicate(format: "label ==[c] 'Onion services'")).firstMatch.exists,
             "A .onion favourite belongs in the onion services group."
         )
         XCTAssertEqual(
@@ -86,9 +100,9 @@ final class FavouritesUITests: XCTestCase {
             card.waitForNonExistence(timeout: Timeout.transition),
             "Deleting should remove the card."
         )
-        XCTAssertTrue(
-            app.staticTexts["Nothing saved yet"].waitForExistence(timeout: Timeout.transition),
-            "Removing the only favourite should bring the empty state back."
+        XCTAssertFalse(
+            app.staticTexts["Test Site"].exists,
+            "Nothing of the deleted favourite should be left on the screen."
         )
     }
 }
