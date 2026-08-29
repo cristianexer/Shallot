@@ -138,8 +138,10 @@ behaviour.
 
 ## Tests
 
-Every suite is hermetic: `AppContainer` swaps in `MockTorService` and an
-in-memory store under test, so nothing below needs the Tor network.
+Every suite that runs by default is hermetic: `AppContainer` detects a test
+host and swaps in `MockTorService` and an in-memory store, so nothing below
+needs the Tor network. The one exception is `LiveTorIntegrationTests`, which is
+opt-in and covered further down.
 
 ```sh
 # Unit, logic and security suites (Swift Testing)
@@ -309,7 +311,12 @@ there is. All levels get autoplay off, picture-in-picture off and
 `WKContentRuleList`s — a base list of third-party trackers plus `make-https`, and
 a strict list that additionally blocks remote fonts and third-party scripts —
 enforced below the JavaScript layer, which catches sub-resources that never
-reach the navigation delegate.
+reach the navigation delegate. The `make-https` rule deliberately excludes
+onion domains and top-level documents: an onion address already authenticates
+and encrypts the connection end to end and almost no onion service listens on
+443, so upgrading one does not add security, it breaks the page. Top-level
+navigation is `NavigationPolicy`'s job, because that is the only place that
+knows about the exemption.
 
 ### Tor lifecycle
 
@@ -349,6 +356,34 @@ resolved on-device, so relay country labels in the Monitor cost no network call.
   own HTTPS-only mode, on by default and implemented in `NavigationPolicy`, is
   the control that actually governs insecure page loads.
 
+### The live suite
+
+`ShallotTests/Security/LiveTorIntegrationTests.swift` is the one suite that
+talks to the real Tor network. It bootstraps a real Tor and asserts what the app
+actually promises: that `check.torproject.org` reports `IsTor` true with an
+address that is not this machine's — including through the app's own
+`WKWebView`, not just a `URLSession` standing in for it — that two tabs leave by
+two different exit relays, and that an onion service loads.
+
+It is skipped unless switched on. `xcodebuild` does not forward its own
+environment into a test host running in the simulator, so the switch is a marker
+file on the shared filesystem:
+
+```sh
+touch /tmp/shallot-live-tests
+xcodebuild test \
+  -project Shallot.xcodeproj -scheme Shallot \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -parallel-testing-enabled NO \
+  -only-testing:ShallotTests/LiveTorIntegrationTests
+```
+
+`-parallel-testing-enabled NO` matters: parallel clones would each start their
+own Tor and race for the same public endpoint. Setting `SHALLOT_LIVE_TESTS=1`
+works too where the environment does reach the test host. CI runs this on a
+manual job, never on a pull request — Tor exit traffic from shared runners is
+frequently blocked or captcha'd, and a flaky gate is one people learn to ignore.
+
 ---
 
 ## Deliberate limitations
@@ -387,6 +422,21 @@ optional and it is not automatic.
 **Fingerprint parity with desktop Tor Browser is impossible**, for the reason at
 the top of this file. The in-app honesty statement in Settings exists because of
 it and must not be softened.
+
+**There are no snapshot tests.** The build spec asks for
+`swift-snapshot-testing` across device sizes, Dynamic Type sizes and
+Reduce Motion. Adding it means giving `ShallotTests` a Swift package
+dependency, and doing that forces Xcode to build the whole package graph as
+dynamic frameworks so the app and the test bundle can share it — at which point
+`libcrypto` fails to link, because it resolves two symbols out of `libssl` that
+only exist once everything is statically linked into one binary. The suites are
+in one target for exactly that reason (see the note at the top of
+`Packages/ShallotCore/Package.swift`). Layout regressions are covered instead by
+the XCUITest accessibility audits and the UI suites, which run against both size
+classes. Restoring snapshot testing means either vendoring the library's source
+into the test target or fixing the upstream `libcrypto`/`libssl` split — neither
+is a five-minute job, and pretending otherwise in a comment would be worse than
+saying so here.
 
 **Out of scope, deliberately:** system-wide tunnelling of other apps via
 `NEPacketTunnelProvider` (would need the Network Extension entitlement), cloud
