@@ -132,7 +132,19 @@ final class AccessibilityUITests: XCTestCase {
 
     @MainActor
     private static func describe(_ issue: XCUIAccessibilityAuditIssue) -> String {
-        "• [\(issue.compactDescription)] \(issue.element?.label ?? "no element") — \(issue.detailedDescription)"
+        // The element and its frame are what make a finding fixable. Without
+        // them an audit failure just says "something on this screen", which is
+        // exactly the report that sent us hunting the last time.
+        let element = issue.element
+        let identity: String
+        if let element {
+            let label = element.label.isEmpty ? "unlabelled" : "\"\(element.label)\""
+            let identifier = element.identifier.isEmpty ? "" : " id=\(element.identifier)"
+            identity = "\(element.elementType.rawValue):\(label)\(identifier) frame=\(element.frame)"
+        } else {
+            identity = "no element"
+        }
+        return "• [\(issue.compactDescription)] \(identity) — \(issue.detailedDescription)"
     }
 
     private func attach(_ text: String, named name: String) {

@@ -157,11 +157,7 @@ public final class FavouritesViewModel {
             importSummary = "That file is too large to be a bookmark file."
             return
         }
-        // Lossy by design: a bookmark file written in some other encoding
-        // still has usable ASCII markup, and a mangled character in a title is
-        // a better outcome than refusing the whole import.
-        let parsed = BookmarkFile.parse(String(decoding: data, as: UTF8.self))
-        importSummary = saveImported(parsed).summary
+        importSummary = saveImported(BookmarkFile.parse(data)).summary
     }
 
     /// Saves everything in `parsed` that is not already a favourite.

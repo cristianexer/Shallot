@@ -279,7 +279,7 @@ struct BookmarkExportDocument: FileDocument {
 
     init(configuration: ReadConfiguration) throws {
         let data = configuration.file.regularFileContents ?? Data()
-        text = String(decoding: data, as: UTF8.self)
+        text = String(data: data, encoding: .utf8) ?? ""
     }
 
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {

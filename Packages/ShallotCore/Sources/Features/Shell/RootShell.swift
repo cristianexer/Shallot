@@ -71,7 +71,7 @@ public struct RootShell: View {
 
     private var compactShell: some View {
         ZStack(alignment: .bottom) {
-            ShallotBackdrop(isPaused: model.isObscured)
+            ShallotBackdrop(isPaused: model.isObscured, isSubdued: isBackdropCovered)
 
             browser
                 // The bar floats over the page, so the page has to end above it
@@ -91,6 +91,16 @@ public struct RootShell: View {
     /// The bar hides only while a page is being scrolled.
     private var isToolbarVisible: Bool { model.browser.isChromeVisible }
 
+    /// Whether a web page is covering the backdrop.
+    ///
+    /// Only the browser can cover it — the other screens are translucent and
+    /// the rain reads through them, which is the whole visual idea.
+    private var isBackdropCovered: Bool {
+        model.section == .browser
+            && model.presentedSection == nil
+            && model.browser.isShowingWebContent
+    }
+
     // MARK: - Regular (iPad, iPhone landscape)
 
     private var regularShell: some View {
@@ -98,7 +108,7 @@ public struct RootShell: View {
             sidebar
         } detail: {
             ZStack(alignment: .bottom) {
-                ShallotBackdrop(isPaused: model.isObscured)
+                ShallotBackdrop(isPaused: model.isObscured, isSubdued: isBackdropCovered)
 
                 screen
                     .safeAreaPadding(.bottom, model.section == .browser && isToolbarVisible ? 72 : 6)

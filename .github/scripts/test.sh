@@ -39,6 +39,10 @@ done < <(
 skips+=("-skip-testing:ShallotTests/PerformanceTests")
 echo "==> Skipping: ${skips[*]}"
 
+# xcodebuild refuses to overwrite a result bundle, so a second local run would
+# fail on the leftovers of the first. CI always starts clean and never noticed.
+rm -rf TestResults-Unit.xcresult TestResults-UI.xcresult
+
 run() {
     if command -v xcbeautify >/dev/null; then
         "$@" | xcbeautify --renderer "${XCBEAUTIFY_RENDERER:-terminal}"

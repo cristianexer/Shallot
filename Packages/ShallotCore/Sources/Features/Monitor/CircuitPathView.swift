@@ -112,33 +112,16 @@ public struct CircuitPathView: View {
     }
 
     /// The line between two hops, with a pulse travelling along it.
+    ///
+    /// A `Canvas` in a `TimelineView` per connector meant four timelines
+    /// redrawing on the main thread at 24fps, on a screen that already has the
+    /// rain behind it. This is the same effect handed to Core Animation, which
+    /// runs it off the main thread for nothing.
     private var connector: some View {
-        Group {
-            if reduceMotion {
-                Rectangle().fill(Palette.edgeRed)
-            } else {
-                TimelineView(.animation(minimumInterval: 1.0 / 24.0)) { timeline in
-                    Canvas { context, size in
-                        context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Palette.edgeRed))
-                        let phase = timeline.date.timeIntervalSinceReferenceDate
-                            .truncatingRemainder(dividingBy: 1.8) / 1.8
-                        let width = size.width * 0.6
-                        let x = phase * (size.width + width) - width
-                        context.fill(
-                            Path(CGRect(x: x, y: 0, width: width, height: size.height)),
-                            with: .linearGradient(
-                                Gradient(colors: [.clear, Palette.arterial, .clear]),
-                                startPoint: CGPoint(x: x, y: 0),
-                                endPoint: CGPoint(x: x + width, y: 0)
-                            )
-                        )
-                    }
-                }
-            }
-        }
-        .frame(height: 1.5)
-        .frame(maxWidth: .infinity)
-        .accessibilityHidden(true)
+        ConnectorLine(isAnimated: !reduceMotion)
+            .frame(height: 1.5)
+            .frame(maxWidth: .infinity)
+            .accessibilityHidden(true)
     }
 
     private func displayName(_ relay: RelayNode) -> String {
@@ -152,5 +135,39 @@ public struct CircuitPathView: View {
         }
         let tail = destination.map { ", out to \($0)" } ?? ""
         return "Path: this device, then " + hops.joined(separator: ", then ") + tail
+    }
+}
+
+/// A hairline with a pulse sliding along it.
+private struct ConnectorLine: View {
+    var isAnimated: Bool
+
+    @State private var isTravelling = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let pulse = max(12, width * 0.5)
+            Rectangle()
+                .fill(Palette.edgeRed)
+                .overlay(alignment: .leading) {
+                    if isAnimated {
+                        LinearGradient(
+                            colors: [.clear, Palette.arterial, .clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: pulse)
+                        .offset(x: isTravelling ? width : -pulse)
+                    }
+                }
+                .clipped()
+                .onAppear {
+                    guard isAnimated else { return }
+                    withAnimation(.linear(duration: 1.8).repeatForever(autoreverses: false)) {
+                        isTravelling = true
+                    }
+                }
+        }
     }
 }

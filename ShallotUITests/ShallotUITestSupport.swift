@@ -185,6 +185,7 @@ extension XCUIApplication {
             file: file,
             line: line
         )
+        landmark.waitUntilStill()
     }
 
     /// Closes a destination presented over the browser, if one is up.
@@ -349,4 +350,28 @@ enum Fixture {
 
     /// Refused by `OnionAddress.isValidV3`, so the app declines to load it.
     static let malformedOnionAddress = "definitely-not-valid.onion"
+}
+
+// MARK: - Settling
+
+extension XCUIElement {
+    /// Waits for a presentation to finish moving.
+    ///
+    /// A sheet's contents exist from the first frame of the slide-up, so
+    /// `waitForExistence` returns while the screen is still travelling. That is
+    /// enough for most assertions and not enough for an accessibility audit:
+    /// SwiftUI attaches accessibility elements as a transition settles, so text
+    /// drawn mid-flight is reported as text with no element behind it — a
+    /// real-looking finding that vanishes on the next run. Sampling until the
+    /// frame stops moving removes that whole class of flake.
+    func waitUntilStill(timeout: TimeInterval = Timeout.transition) {
+        let deadline = Date().addingTimeInterval(timeout)
+        var previous = CGRect.null
+        while Date() < deadline {
+            let current = frame
+            if current == previous && !current.isEmpty { return }
+            previous = current
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+    }
 }

@@ -329,10 +329,22 @@ struct BookmarkFileTests {
     func handlesInvalidUTF8() {
         var bytes = Array("<DT><A HREF=\"\(validOnion)\">Caf".utf8)
         bytes += [0xC3, 0x28, 0xFF]
-        bytes += Array("</A>".utf8)
-        let result = BookmarkFile.parse(String(decoding: bytes, as: UTF8.self), now: fixedNow())
-        #expect(result.bookmarks.count == 1)
+        bytes += Array("</A>\n<DT><A HREF=\"https://example.org/\">And this one</A>".utf8)
+
+        let result = BookmarkFile.parse(Data(bytes), now: fixedNow())
+        #expect(result.bookmarks.count == 2)
         #expect(result.bookmarks.first?.url.absoluteString == validOnion)
+        #expect(result.bookmarks.last?.title == "And this one")
+    }
+
+    @Test("A file written in Latin-1 rather than UTF-8 still imports")
+    func handlesLatin1() throws {
+        let document = "<DT><A HREF=\"https://example.org/\">Caf\u{00E9} Bulletin</A>"
+        let latin1 = try #require(document.data(using: .isoLatin1))
+        #expect(latin1.count == document.utf8.count - 1)
+
+        let bookmark = try #require(BookmarkFile.parse(latin1, now: fixedNow()).bookmarks.first)
+        #expect(bookmark.title == "Café Bulletin")
     }
 
     @Test("A multi-megabyte file parses in one pass, without backtracking")

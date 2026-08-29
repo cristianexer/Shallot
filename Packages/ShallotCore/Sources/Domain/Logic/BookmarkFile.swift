@@ -72,7 +72,7 @@ public enum BookmarkFile {
 
     // MARK: - Parsing
 
-    /// Reads every link in `text`, in document order.
+    /// Reads every link in a bookmark file, in document order.
     ///
     /// Folders are flattened away. `Favourite` has no notion of a folder, and
     /// inventing one so that an import can round-trip would be a data model
@@ -80,6 +80,21 @@ public enum BookmarkFile {
     ///
     /// - Parameter now: Substituted for a missing or nonsensical `ADD_DATE`.
     ///   Injected so the behaviour is testable without waiting for a clock.
+    public static func parse(_ file: Data, now: Date = Date()) -> ParseResult {
+        parse(decoded(file), now: now)
+    }
+
+    /// UTF-8 where the file is UTF-8, Latin-1 where it is not.
+    ///
+    /// This format is older than UTF-8 being universal, and an export from an
+    /// elderly browser on Windows is frequently Latin-1. Falling back beats
+    /// refusing the file: the markup is ASCII either way, so at worst an
+    /// accented character in one title comes out wrong.
+    static func decoded(_ file: Data) -> String {
+        String(data: file, encoding: .utf8) ?? String(data: file, encoding: .isoLatin1) ?? ""
+    }
+
+    /// Reads every link in `text`, in document order.
     public static func parse(_ text: String, now: Date = Date()) -> ParseResult {
         let bytes = Array(text.utf8)
         var result = ParseResult()
@@ -133,7 +148,13 @@ public enum BookmarkFile {
     /// checks either side of it exist only to say which rule was broken.
     static func classify(_ href: String) -> Result<URL, SkipReason> {
         let trimmed = href.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let url = URL(string: trimmed) else {
+        guard !trimmed.isEmpty else { return .failure(.malformedAddress) }
+        // A space inside an address means the attribute was not closed and we
+        // read past it — `URL` would silently percent-encode the remainder
+        // into the path and hand back a plausible-looking URL for a page that
+        // does not exist. `URLNormalizer.looksLikeHost(_:)` refuses a space
+        // for the same reason.
+        guard !trimmed.contains(where: \.isWhitespace), let url = URL(string: trimmed) else {
             return .failure(.malformedAddress)
         }
         guard let scheme = url.scheme?.lowercased() else { return .failure(.malformedAddress) }
@@ -296,6 +317,11 @@ public enum BookmarkFile {
         return bytes.count
     }
 
+    /// A slice of the file as text, decoded the same way the whole file is.
+    private static func text(_ bytes: ArraySlice<UInt8>) -> String {
+        String(bytes: bytes, encoding: .utf8) ?? String(bytes: bytes, encoding: .isoLatin1) ?? ""
+    }
+
     private static func isSpace(_ byte: UInt8) -> Bool {
         byte == 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0D || byte == 0x0C
     }
@@ -307,7 +333,7 @@ public enum BookmarkFile {
         while index < bytes.count, !isSpace(bytes[index]), bytes[index] != closeAngle {
             index += 1
         }
-        return String(decoding: bytes[start..<index], as: UTF8.self).lowercased()
+        return text(bytes[start..<index]).lowercased()
     }
 
     /// Consumes the remainder of a tag, returning only the attributes named in
@@ -338,7 +364,7 @@ public enum BookmarkFile {
                   bytes[index] != UInt8(ascii: "=") {
                 index += 1
             }
-            let name = String(decoding: bytes[nameStart..<index], as: UTF8.self).lowercased()
+            let name = text(bytes[nameStart..<index]).lowercased()
 
             while index < bytes.count, isSpace(bytes[index]) { index += 1 }
             guard index < bytes.count, bytes[index] == UInt8(ascii: "=") else {
@@ -352,7 +378,7 @@ public enum BookmarkFile {
 
             let range = readAttributeValue(bytes, &index)
             if wanted.contains(name) {
-                attributes[name] = String(decoding: bytes[range], as: UTF8.self)
+                attributes[name] = text(bytes[range])
             }
         }
         return attributes
@@ -385,7 +411,6 @@ public enum BookmarkFile {
     private static func readText(_ bytes: [UInt8], _ index: inout Int) -> String {
         let start = index
         while index < bytes.count, bytes[index] != openAngle { index += 1 }
-        return String(decoding: bytes[start..<index], as: UTF8.self)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return text(bytes[start..<index]).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

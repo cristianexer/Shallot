@@ -15,18 +15,39 @@ public struct RainView: View {
     /// browser sitting in the app switcher is not animating a canvas.
     public var isPaused: Bool
 
+    /// Nearly covered: a page is on screen and only a sliver of rain shows
+    /// around the chrome.
+    ///
+    /// `Canvas` renders the whole canvas whether or not anything is on top of
+    /// it, so a full-rate backdrop behind an opaque web page is pure cost. It
+    /// keeps moving, slowly, rather than freezing — a stopped sliver behind the
+    /// address bar reads as the app having hung, which is the opposite of the
+    /// problem being solved.
+    public var isSubdued: Bool
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    public init(isPaused: Bool = false) {
+    public init(isPaused: Bool = false, isSubdued: Bool = false) {
         self.isPaused = isPaused
+        self.isSubdued = isSubdued
     }
 
-    private static let glyphs = Array("ｱｲｳｴｵｶｷｸｹｺｻｼｽｾﾀﾁﾂﾃﾅﾆﾇﾊﾋﾌﾍﾎ0123456789ABCDEFxX#<>/█▓")
-    private static let cell: CGFloat = 15
-    private static let trailLength = 7
+    // Trimmed from forty. Every glyph in this set is resolved through the
+    // text engine on each frame, and past about two dozen the extra variety is
+    // invisible while the layout cost is not.
+    private static let glyphs = Array("ｱｲｳｴｵｶｷｸｹｺｻｼｽﾀﾁﾂﾅﾆﾇﾊﾋﾌ0123456789ABCDEF#<>/█▓")
+
+    /// The most columns the rain will ever draw, whatever the screen.
+    ///
+    /// Deriving the column count from the width meant a 13-inch iPad did two
+    /// and a half times the work of a phone, every frame, for an effect nobody
+    /// counts the columns of. The cell grows to fill instead.
+    private static let maximumColumns = 46
+    private static let minimumCell: CGFloat = 15
+    private static let trailLength = 6
 
     public var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 18.0, paused: isPaused || reduceMotion)) { timeline in
+        TimelineView(.animation(minimumInterval: isSubdued ? 1.0 / 5.0 : 1.0 / 15.0, paused: isPaused || reduceMotion)) { timeline in
             Canvas(opaque: false, rendersAsynchronously: true) { context, size in
                 let seconds = reduceMotion
                     ? 0
@@ -43,8 +64,8 @@ public struct RainView: View {
 
     private func draw(in context: inout GraphicsContext, size: CGSize, seconds: TimeInterval) {
         guard size.width > 0, size.height > 0 else { return }
-        let cell = Self.cell
-        let columnCount = max(1, Int((size.width / cell).rounded(.up)))
+        let columnCount = max(1, min(Self.maximumColumns, Int((size.width / Self.minimumCell).rounded(.up))))
+        let cell = size.width / CGFloat(columnCount)
         let font = Font.system(size: cell, weight: .semibold, design: .monospaced)
 
         // Resolve each glyph once per frame in each of the two tones, rather
@@ -93,15 +114,18 @@ public struct RainView: View {
 /// The full backdrop: gradient, rain, vignette and scanlines.
 public struct ShallotBackdrop: View {
     public var isPaused: Bool
+    /// A page is covering nearly all of it; see `RainView.isSubdued`.
+    public var isSubdued: Bool
 
-    public init(isPaused: Bool = false) {
+    public init(isPaused: Bool = false, isSubdued: Bool = false) {
         self.isPaused = isPaused
+        self.isSubdued = isSubdued
     }
 
     public var body: some View {
         ZStack {
             Palette.backdrop
-            RainView(isPaused: isPaused)
+            RainView(isPaused: isPaused, isSubdued: isSubdued)
             // Darkens the edges so glass chrome reads against the rain.
             RadialGradient(
                 colors: [.clear, Palette.void.opacity(0.55), Palette.void.opacity(0.92)],
