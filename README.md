@@ -6,6 +6,14 @@ A Tor browser for iPhone and iPad. Universal SwiftUI app, embedded Tor, every
 byte of web traffic routed over SOCKS5 through a local Tor client, `.onion`
 reachable, nothing written to disk but favourites and settings.
 
+<p align="center">
+  <img src="docs/screenshot-iphone.png" alt="Shallot on iPhone: the start page, with the live Tor circuit and quick access" width="300">
+  &nbsp;&nbsp;
+  <img src="docs/screenshot-ipad.png" alt="Shallot on iPad: the split-view shell, with the sidebar listing open tabs and their circuits" width="440">
+</p>
+
+<p align="center"><em>Both shells bind to the same view models, so behaviour is identical and only the chrome differs. The circuit shown is a real one; the country codes are resolved on-device from the bundled GeoIP database.</em></p>
+
 ---
 
 ## The constraint that shapes everything
