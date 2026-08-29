@@ -86,8 +86,14 @@ struct LiveTorIntegrationTests {
     }
 
     struct TorCheck: Decodable {
-        let IsTor: Bool
-        let IP: String
+        let isTor: Bool
+        let address: String
+
+        // check.torproject.org answers with capitalised keys.
+        private enum CodingKeys: String, CodingKey {
+            case isTor = "IsTor"
+            case address = "IP"
+        }
     }
 
     static func checkIP(port: UInt16) async throws -> TorCheck {
@@ -173,14 +179,14 @@ struct LiveTorIntegrationTests {
         let port = try await tor.socksPort(forIsolationKey: .utility)
 
         let throughTor = try await Self.checkIP(port: port)
-        #expect(throughTor.IsTor, "check.torproject.org says this connection is not using Tor")
+        #expect(throughTor.isTor, "check.torproject.org says this connection is not using Tor")
 
         let url = URL(string: "https://check.torproject.org/api/ip")!
         let (directData, _) = try await URLSession(configuration: .ephemeral).data(from: url)
         let direct = try JSONDecoder().decode(TorCheck.self, from: directData)
 
-        #expect(!direct.IsTor)
-        #expect(throughTor.IP != direct.IP, "the Tor-routed address matched the direct one")
+        #expect(!direct.isTor)
+        #expect(throughTor.address != direct.address, "the Tor-routed address matched the direct one")
     }
 
     @Test("Two tabs leave the network by two different exits")
@@ -197,9 +203,9 @@ struct LiveTorIntegrationTests {
         let firstResult = try await first
         let secondResult = try await second
 
-        #expect(firstResult.IsTor)
-        #expect(secondResult.IsTor)
-        #expect(firstResult.IP != secondResult.IP, "two isolated tabs shared an exit relay")
+        #expect(firstResult.isTor)
+        #expect(secondResult.isTor)
+        #expect(firstResult.address != secondResult.address, "two isolated tabs shared an exit relay")
     }
 
     @Test("A page loaded in the app's own web view really goes through Tor")
@@ -256,6 +262,6 @@ struct LiveTorIntegrationTests {
         // which Tor is free to pick again.
         try await Task.sleep(for: .seconds(12))
         let port = try await tor.socksPort(forIsolationKey: .utility)
-        #expect(try await Self.checkIP(port: port).IsTor)
+        #expect(try await Self.checkIP(port: port).isTor)
     }
 }

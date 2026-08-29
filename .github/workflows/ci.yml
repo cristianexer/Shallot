@@ -11,7 +11,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  DEVELOPER_DIR: /Applications/Xcode_26.app/Contents/Developer
+  # Set per job by the "Select Xcode" step rather than pinned to one app
+  # bundle: runner images rename Xcode between releases, and a hard-coded
+  # path fails with a confusing "command not found" rather than a clear one.
+  MINIMUM_XCODE: "26.0"
   PROJECT: Shallot.xcodeproj
   SCHEME: Shallot
   # Signing is off for simulator builds; CI has no certificates and does not
@@ -29,15 +32,15 @@ jobs:
   # ---------------------------------------------------------------------------
   build-and-test:
     name: Build and test
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode 26 and install xcbeautify
+      - name: Select Xcode and install xcbeautify
         run: |
-          sudo xcode-select -s "$DEVELOPER_DIR"
+          .github/scripts/select-xcode.sh
           brew install xcbeautify
           xcodebuild -version
           swift --version
@@ -127,6 +130,7 @@ jobs:
             -destination "${{ steps.sim.outputs.destination }}" \
             -derivedDataPath DerivedData \
             -only-testing:ShallotTests ${{ steps.live.outputs.flags }} \
+            -skip-testing:ShallotTests/PerformanceTests \
             -resultBundlePath TestResults-Unit.xcresult \
             $UNSIGNED | xcbeautify --renderer github-actions
 
@@ -154,7 +158,7 @@ jobs:
   # ---------------------------------------------------------------------------
   lint:
     name: Lint
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 20
 
     steps:
@@ -178,7 +182,7 @@ jobs:
       # a broken .swift-format — still fail this step.
       - name: swift-format (lint)
         run: |
-          sudo xcode-select -s "$DEVELOPER_DIR"
+          .github/scripts/select-xcode.sh
           xcrun swift-format lint --recursive \
             Packages/ShallotCore/Sources Shallot ShallotTests ShallotUITests
 
@@ -203,15 +207,15 @@ jobs:
   live-integration:
     name: Live integration, leak and performance suites (manual)
     if: github.event_name == 'workflow_dispatch'
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode 26 and install xcbeautify
+      - name: Select Xcode and install xcbeautify
         run: |
-          sudo xcode-select -s "$DEVELOPER_DIR"
+          .github/scripts/select-xcode.sh
           brew install xcbeautify
 
       - name: Cache SwiftPM dependencies
@@ -280,6 +284,14 @@ jobs:
             echo "Selected:$flags"
           fi
 
+      # The live suites are opt-in at runtime as well as at selection time.
+      # `xcodebuild` does not forward its own environment into a test host
+      # running in the simulator, so the switch is a marker file on the shared
+      # filesystem — see `shallotLiveTestsEnabled()`.
+      - name: Enable the live suites
+        if: steps.discover.outputs.flags != ''
+        run: touch /tmp/shallot-live-tests
+
       - name: Live suites
         if: steps.discover.outputs.flags != ''
         run: |
@@ -289,6 +301,7 @@ jobs:
             -destination "${{ steps.sim.outputs.destination }}" \
             -derivedDataPath DerivedData \
             ${{ steps.discover.outputs.flags }} \
+            -only-testing:ShallotTests/PerformanceTests \
             -resultBundlePath TestResults-Live.xcresult \
             $UNSIGNED | xcbeautify --renderer github-actions
 
