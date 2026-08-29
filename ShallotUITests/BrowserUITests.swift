@@ -242,3 +242,46 @@ extension XCUIApplication {
         return "the button at \(chosenFrame) of candidates \(considered)"
     }
 }
+
+extension BrowserUITests {
+    @MainActor
+    func testTappingAFavouriteClosesTheSheetAndReturnsToTheBrowser() {
+        // Reported from a device: the favourite opened into a tab you could not
+        // see, because the list never got out of the way. The model-level wiring
+        // is covered elsewhere; this is the view layer actually dismissing.
+        let app = launchShallot()
+        app.show(.favourites)
+        app.addFavourite(named: "Test Site", address: Fixture.onionAddress)
+
+        let card = app.buttons["favourite-card-Test Site"]
+        XCTAssertTrue(card.waitForExistence(timeout: Timeout.element))
+        app.scrollUntilHittable(card)
+        card.tap()
+
+        XCTAssertTrue(
+            app.buttons["More"].waitForExistence(timeout: Timeout.transition),
+            "Tapping a favourite should land on the browser."
+        )
+        XCTAssertTrue(
+            app.staticTexts["FAVOURITES"].waitForNonExistence(timeout: Timeout.transition),
+            "The favourites sheet should have closed rather than staying over the page."
+        )
+    }
+
+    @MainActor
+    func testReloadIsOfferedOnceAnAddressHasBeenOpened() {
+        // Reload used to be tied to a page having successfully committed, which
+        // took it away at exactly the moment it was wanted — on the error page
+        // after a load that did not arrive.
+        let app = launchShallot()
+        let reload = app.buttons["Reload"]
+        XCTAssertTrue(reload.waitForExistence(timeout: Timeout.element))
+        XCTAssertFalse(reload.isEnabled, "Nothing has been opened yet.")
+
+        app.openAddress(Fixture.onionAddress)
+        XCTAssertTrue(
+            app.wait(for: reload, toBeEnabled: true, timeout: Timeout.element),
+            "Once an address has been asked for, reload has something to retry."
+        )
+    }
+}

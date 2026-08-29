@@ -300,6 +300,48 @@ extension XCUIApplication {
 
 // MARK: - Fixtures
 
+extension XCUIApplication {
+    /// Types an address into the omnibar and submits it.
+    @MainActor
+    func openAddress(
+        _ address: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        // The pill is addressed by its VoiceOver label, which is what names it
+        // — the app is deliberately icon-only around it.
+        let pill = element(.any, labelled: "Address bar, empty")
+        let target = pill.exists ? pill : buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Address")
+        ).firstMatch
+        guard target.waitForExistence(timeout: Timeout.element) else {
+            XCTFail("The address bar was not found.", file: file, line: line)
+            return
+        }
+        target.tap()
+
+        let field = textFields["Search or .onion address"]
+        guard field.waitForExistence(timeout: Timeout.transition) else {
+            XCTFail("Tapping the address bar did not open a field.", file: file, line: line)
+            return
+        }
+        field.typeText(address)
+        field.typeText("\n")
+    }
+
+    /// Waits for an element's enabled state to settle, which SwiftUI updates a
+    /// frame or two after the state behind it changes.
+    @MainActor
+    func wait(for element: XCUIElement, toBeEnabled enabled: Bool, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if element.exists, element.isEnabled == enabled { return true }
+            _ = element.waitForExistence(timeout: 0.1)
+        }
+        return element.exists && element.isEnabled == enabled
+    }
+}
+
 enum Fixture {
     /// A syntactically valid v3 onion address: 56 base32 characters plus the
     /// suffix. Nothing ever connects to it — the app only has to accept it.

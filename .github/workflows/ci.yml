@@ -70,24 +70,14 @@ jobs:
 
       # The simulator is discovered rather than pinned by name: which iPhone
       # models exist depends on the runtime the runner's Xcode ships, and a
-      # hard-coded name fails outright the moment that moves, because xcodebuild
-      # resolves a bare name against OS:latest. -showdestinations only lists
-      # simulators the deployment target can run on, so this can never pick
-      # something older than iOS 18 — the floor forced by swift-tor's .iOS(.v18).
+      # hard-coded name fails outright the moment that moves. The script asks
+      # simctl directly, creates a device if the image has a runtime but no
+      # ready one, and dumps the runtime and device lists if it still cannot
+      # find anything — so a future failure is diagnosable from the log.
       - name: Pick a simulator
         id: sim
         run: |
-          udid=$(xcodebuild -project "$PROJECT" -scheme "$SCHEME" -showdestinations 2>/dev/null \
-            | sed -n '/Available destinations/,/Ineligible destinations/p' \
-            | grep 'platform:iOS Simulator' \
-            | grep 'name:iPhone' \
-            | grep -v 'placeholder' \
-            | tail -1 \
-            | sed -E 's/.*id:([0-9A-Fa-f-]+).*/\1/')
-          if [ -z "$udid" ]; then
-            echo "::error::No iOS simulator available on this runner."
-            exit 1
-          fi
+          udid=$(.github/scripts/pick-simulator.sh)
           echo "Using simulator $udid"
           echo "destination=platform=iOS Simulator,id=$udid" >> "$GITHUB_OUTPUT"
 
@@ -237,24 +227,14 @@ jobs:
 
       # The simulator is discovered rather than pinned by name: which iPhone
       # models exist depends on the runtime the runner's Xcode ships, and a
-      # hard-coded name fails outright the moment that moves, because xcodebuild
-      # resolves a bare name against OS:latest. -showdestinations only lists
-      # simulators the deployment target can run on, so this can never pick
-      # something older than iOS 18 — the floor forced by swift-tor's .iOS(.v18).
+      # hard-coded name fails outright the moment that moves. The script asks
+      # simctl directly, creates a device if the image has a runtime but no
+      # ready one, and dumps the runtime and device lists if it still cannot
+      # find anything — so a future failure is diagnosable from the log.
       - name: Pick a simulator
         id: sim
         run: |
-          udid=$(xcodebuild -project "$PROJECT" -scheme "$SCHEME" -showdestinations 2>/dev/null \
-            | sed -n '/Available destinations/,/Ineligible destinations/p' \
-            | grep 'platform:iOS Simulator' \
-            | grep 'name:iPhone' \
-            | grep -v 'placeholder' \
-            | tail -1 \
-            | sed -E 's/.*id:([0-9A-Fa-f-]+).*/\1/')
-          if [ -z "$udid" ]; then
-            echo "::error::No iOS simulator available on this runner."
-            exit 1
-          fi
+          udid=$(.github/scripts/pick-simulator.sh)
           echo "Using simulator $udid"
           echo "destination=platform=iOS Simulator,id=$udid" >> "$GITHUB_OUTPUT"
 

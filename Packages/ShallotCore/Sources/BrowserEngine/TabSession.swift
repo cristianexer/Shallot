@@ -113,6 +113,7 @@ public final class TabSession: NSObject {
         attemptedUpgrades.removeAll()
         isPresentingErrorPage = false
         lastChromeDecisionOffset = 0
+        tab?.requestedURL = url
         engine?.revealChrome()
         let decision = NavigationPolicy.decide(
             NavigationPolicy.Context(
@@ -134,14 +135,29 @@ public final class TabSession: NSObject {
     }
 
     public func reload() {
-        guard engine?.canCarryTraffic == true else {
-            present(.torNotRunning, for: webView.url)
-            return
+        switch ReloadPolicy.plan(
+            canCarryTraffic: engine?.canCarryTraffic ?? false,
+            isShowingErrorPage: isPresentingErrorPage,
+            committedURL: webView.url,
+            requestedURL: tab?.requestedURL
+        ) {
+        case .refuse(let reason):
+            present(reason, for: webView.url ?? tab?.requestedURL)
+        case .reloadFromOrigin:
+            // Shown before WebKit is asked, because starting a provisional
+            // navigation over Tor can take a moment and until it does there is
+            // nothing for the progress line to draw. A reload that looks like
+            // it did nothing is indistinguishable from one that did.
+            tab?.loadState = .loading(progress: 0.05)
+            // Skips the cache, and re-runs the upgrade and policy decisions
+            // from scratch, which is what a person means by reload.
+            webView.reloadFromOrigin()
+        case .load(let url):
+            tab?.loadState = .loading(progress: 0.05)
+            load(url)
+        case .nothingToDo:
+            break
         }
-        // `reloadFromOrigin` skips the cache. The store is non-persistent so
-        // there is little cache to skip, but it also re-runs the upgrade and
-        // policy decisions from scratch, which is what a user means by reload.
-        webView.reloadFromOrigin()
     }
 
     public func goBack() { webView.goBack() }

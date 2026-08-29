@@ -146,7 +146,7 @@ public struct OmniBar: View {
         if model.isLoading {
             control("xmark", label: "Stop loading") { model.stopLoading() }
         } else {
-            control("arrow.clockwise", label: "Reload", enabled: model.activeTab?.url != nil) {
+            control("arrow.clockwise", label: "Reload", enabled: model.canReload) {
                 model.reload()
             }
         }

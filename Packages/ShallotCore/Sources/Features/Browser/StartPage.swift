@@ -87,6 +87,10 @@ public struct StartPage: View {
 
     private var hero: some View {
         VStack(spacing: 10) {
+            ShallotMark(layers: 3)
+                .frame(width: 46, height: 46)
+                .padding(.bottom, 2)
+
             Text("SHALLOT")
                 .font(Typography.wordmark)
                 .tracking(8)

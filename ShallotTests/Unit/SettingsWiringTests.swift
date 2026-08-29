@@ -1,4 +1,5 @@
 import Foundation
+import WebKit
 import Testing
 
 @testable import BrowserEngine
@@ -268,4 +269,168 @@ struct SettingsWiringTests {
         )
         #expect(harness.browser.addressText.contains("how%20does%20tor%20work"))
     }
+}
+
+/// The two journeys a person takes constantly, checked end to end.
+///
+/// Both of these were reported as broken from a real device, which is exactly
+/// the class of bug a view-model test catches and a screenshot does not.
+@Suite("Browser journeys")
+@MainActor
+struct BrowserJourneyTests {
+    /// A full coordinator over test doubles, taken through its launch
+    /// sequence — which is what opens the engine's kill switch.
+    static func makeApp(
+        behaviour: MockTorService.Behaviour = .immediate
+    ) async -> (AppModel, MockTorService, BrowserEngine) {
+        let tor = MockTorService(behaviour: behaviour)
+        let engine = BrowserEngine(settings: .default, monitor: nil)
+        let monitor = MockMonitorFeed(events: [])
+        let model = AppModel(
+            tor: tor,
+            engine: engine,
+            session: BrowsingSession(),
+            favouritesRepository: InMemoryFavouritesRepository(favourites: Favourite.journeySamples),
+            settingsStore: InMemorySettingsStore(),
+            monitorFeed: monitor,
+            lock: MockAppLock(),
+            appVersion: "test"
+        )
+        await model.start()
+        _ = await waitUntil { engine.canCarryTraffic }
+        return (model, tor, engine)
+    }
+
+    @discardableResult
+    static func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool) async -> Bool {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        while ContinuousClock.now < deadline {
+            if condition() { return true }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        return condition()
+    }
+
+    @Test("Tapping a favourite closes the sheet and goes to the page")
+    func openingAFavouriteNavigates() async throws {
+        let (model, tor, _) = await Self.makeApp()
+        _ = tor
+
+        // As a phone would have it: the favourites list presented over the
+        // browser.
+        model.show(.favourites, isCompact: true)
+        #expect(model.presentedSection == .favourites)
+
+        let favourite = try #require(model.favourites.favourites.first)
+        model.favourites.openFavourite(favourite)
+
+        #expect(model.presentedSection == nil, "the sheet should close")
+        #expect(model.section == .browser, "and the browser should be in front")
+        #expect(
+            await Self.waitUntil { model.browser.addressText.contains(favourite.url.host() ?? "") },
+            "the favourite's address should be the one being opened, was \(model.browser.addressText)"
+        )
+    }
+
+    @Test("On an iPad the same tap selects the browser rather than dismissing a sheet")
+    func openingAFavouriteOnTheSplitShell() async throws {
+        let (model, tor, _) = await Self.makeApp()
+        _ = tor
+        model.show(.favourites, isCompact: false)
+        #expect(model.section == .favourites)
+        #expect(model.presentedSection == nil)
+
+        let favourite = try #require(model.favourites.favourites.first)
+        model.favourites.openFavourite(favourite)
+        #expect(model.section == .browser)
+    }
+
+    @Test("Reload asks the page to load again, and the tab shows that it is loading")
+    func reloadRestartsTheLoad() async throws {
+        let (model, tor, engine) = await Self.makeApp()
+        _ = tor
+
+        let url = URL(string: "https://example.org/article")!
+        model.browser.open(url: url)
+        #expect(
+            await Self.waitUntil { engine.sessionCount == 1 },
+            "opening should have built a session"
+        )
+        let tab = try #require(model.browser.activeTab)
+        let session = try #require(engine.existingSession(for: tab.id))
+
+        // Settle first, so the reload is what the assertion sees rather than
+        // the tail of the original load.
+        _ = await Self.waitUntil(timeout: .seconds(8)) { !session.webView.isLoading }
+
+        model.browser.reload()
+        #expect(
+            await Self.waitUntil(timeout: .seconds(8)) { model.browser.isLoading || session.webView.isLoading },
+            "reload should have started a load the omnibar can show progress for"
+        )
+    }
+
+    @Test("Reload still works after a load that never arrived")
+    func reloadAfterAFailedLoad() async throws {
+        // The scripted Tor hands out a port nothing is listening on, so this
+        // load fails — which is the case that matters. `url` never commits, and
+        // reload used to key off `url`, so the one moment someone reaches for
+        // reload was the one moment it was greyed out.
+        let (model, tor, engine) = await Self.makeApp()
+        _ = tor
+
+        let url = URL(string: "https://unreachable.invalid/page")!
+        model.browser.open(url: url)
+        #expect(await Self.waitUntil { engine.sessionCount == 1 })
+
+        let tab = try #require(model.browser.activeTab)
+        #expect(
+            await Self.waitUntil(timeout: .seconds(10)) {
+                if case .failed = tab.loadState { return true }
+                return false
+            },
+            "the load should have failed against a dead port"
+        )
+
+        #expect(tab.requestedURL == url, "the tab remembers what it was asked for")
+        #expect(model.browser.canReload, "and reload must be available to try again")
+
+        // What reload will *do* is asserted as a value rather than by racing
+        // the load: against a dead port the retry fails again faster than a
+        // poll can see it start.
+        let session = try #require(engine.existingSession(for: tab.id))
+        #expect(
+            ReloadPolicy.plan(
+                canCarryTraffic: engine.canCarryTraffic,
+                isShowingErrorPage: true,
+                committedURL: session.webView.url,
+                requestedURL: tab.requestedURL
+            ) == .load(url),
+            "reload should ask for the address again rather than doing nothing"
+        )
+    }
+
+    @Test("Reload is refused while Tor is not carrying traffic")
+    func reloadRespectsTheKillSwitch() async throws {
+        let (model, tor, engine) = await Self.makeApp()
+        _ = tor
+        model.browser.open(url: URL(string: "https://example.org")!)
+        #expect(await Self.waitUntil { engine.sessionCount == 1 })
+
+        engine.canCarryTraffic = false
+        model.browser.reload()
+        let tab = try #require(model.browser.activeTab)
+        #expect(
+            await Self.waitUntil { if case .failed = tab.loadState { true } else { false } },
+            "reloading with Tor down should be refused, not attempted"
+        )
+        _ = tor
+    }
+}
+
+extension Favourite {
+    /// A saved site for the journey tests.
+    static let journeySamples: [Favourite] = [
+        Favourite(title: "Example", url: URL(string: "https://example.org/start")!, sortIndex: 0)
+    ]
 }

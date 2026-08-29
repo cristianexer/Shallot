@@ -143,6 +143,9 @@ struct BootstrapView: View {
     var body: some View {
         VStack(spacing: 16) {
             Spacer()
+            ShallotMark(layers: 3)
+                .frame(width: 58, height: 58)
+                .opacity(0.9)
             Text("CONNECTING TO TOR")
                 .font(Typography.kicker)
                 .tracking(3)

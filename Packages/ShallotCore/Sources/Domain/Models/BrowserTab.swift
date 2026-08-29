@@ -62,7 +62,16 @@ public final class BrowserTab: Identifiable {
     /// mutating `proxyConfigurations` on a live web view.
     public var socksPort: UInt16?
 
+    /// The address that actually committed, as reported by the web view.
     public var url: URL?
+
+    /// The address this tab was last asked to open, whether or not it arrived.
+    ///
+    /// `url` only appears once a load commits, so a page that failed — or an
+    /// onion service that timed out — would leave the tab looking empty and
+    /// take reload away with it, at exactly the moment reload is what you want.
+    public var requestedURL: URL?
+
     public var title: String
 
     /// A picture of what this tab was last showing.
@@ -107,7 +116,10 @@ public final class BrowserTab: Identifiable {
     public var hasThumbnail: Bool { thumbnail != nil }
 
     /// True while the tab is showing the start page rather than a web page.
-    public var isShowingStartPage: Bool { url == nil }
+    public var isShowingStartPage: Bool { url == nil && requestedURL == nil }
+
+    /// Whether there is anything for reload to act on.
+    public var canReload: Bool { url != nil || requestedURL != nil }
 
     /// What the address pill displays.
     public var displayAddress: String {

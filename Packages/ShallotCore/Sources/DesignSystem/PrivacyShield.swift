@@ -24,10 +24,9 @@ public struct PrivacyShield: ViewModifier {
                         Rectangle()
                             .fill(Palette.void)
                             .ignoresSafeArea()
-                        VStack(spacing: 10) {
-                            Image(systemName: "eye.slash")
-                                .font(.system(size: 26, weight: .light))
-                                .foregroundStyle(Palette.arterialSoft)
+                        VStack(spacing: 14) {
+                            ShallotMark(layers: 3)
+                                .frame(width: 64, height: 64)
                             Text("SHALLOT")
                                 .font(Typography.screenTitle)
                                 .tracking(6)
@@ -59,9 +58,8 @@ public struct LockScreen: View {
         ZStack {
             ShallotBackdrop(isPaused: true)
             VStack(spacing: 18) {
-                Image(systemName: "lock")
-                    .font(.system(size: 30, weight: .light))
-                    .foregroundStyle(Palette.arterialSoft)
+                ShallotMark()
+                    .frame(width: 76, height: 76)
                 Text("SHALLOT")
                     .font(Typography.wordmark)
                     .tracking(8)

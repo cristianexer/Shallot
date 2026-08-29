@@ -427,3 +427,76 @@ struct ChromeVisibilityPolicyTests {
         #expect(visible, "scrolling back up should have brought it back")
     }
 }
+
+@Suite("What reload does")
+struct ReloadPolicyTests {
+    static let page = URL(string: "https://example.org/article")!
+    static let blank = URL(string: "about:blank")!
+
+    @Test("A committed page is fetched again")
+    func committedPageReloads() {
+        #expect(
+            ReloadPolicy.plan(
+                canCarryTraffic: true,
+                isShowingErrorPage: false,
+                committedURL: Self.page,
+                requestedURL: Self.page
+            ) == .reloadFromOrigin
+        )
+    }
+
+    @Test("An error page asks for the address again, because there is nothing to reload")
+    func errorPageRetries() {
+        // `reloadFromOrigin` needs a back-forward item. After a failed load
+        // there is none, so it silently does nothing — at the one moment
+        // someone is reaching for reload.
+        #expect(
+            ReloadPolicy.plan(
+                canCarryTraffic: true,
+                isShowingErrorPage: true,
+                committedURL: Self.blank,
+                requestedURL: Self.page
+            ) == .load(Self.page)
+        )
+    }
+
+    @Test("A load that never committed retries the address it was given")
+    func uncommittedLoadRetries() {
+        #expect(
+            ReloadPolicy.plan(
+                canCarryTraffic: true,
+                isShowingErrorPage: false,
+                committedURL: nil,
+                requestedURL: Self.page
+            ) == .load(Self.page)
+        )
+    }
+
+    @Test("A tab that was never asked to open anything does nothing")
+    func freshTabDoesNothing() {
+        #expect(
+            ReloadPolicy.plan(
+                canCarryTraffic: true,
+                isShowingErrorPage: false,
+                committedURL: nil,
+                requestedURL: nil
+            ) == .nothingToDo
+        )
+    }
+
+    @Test("The kill switch comes before everything else")
+    func killSwitchWins() {
+        // Including over a page sitting there perfectly loaded: with Tor down,
+        // fetching it again would go out over the ordinary connection.
+        for isShowingErrorPage in [true, false] {
+            #expect(
+                ReloadPolicy.plan(
+                    canCarryTraffic: false,
+                    isShowingErrorPage: isShowingErrorPage,
+                    committedURL: Self.page,
+                    requestedURL: Self.page
+                ) == .refuse(.torNotRunning)
+            )
+        }
+    }
+}

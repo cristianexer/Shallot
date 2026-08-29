@@ -239,9 +239,11 @@ private struct TabPreview: View {
             if let host = tab.url?.host() {
                 Monogram(Self.monogram(for: host), size: 46)
             } else {
-                Image(systemName: "globe")
-                    .font(.system(size: 26, weight: .light))
-                    .foregroundStyle(Palette.arterialSoft)
+                // The app's own mark rather than a generic globe: a tab with
+                // nothing loaded is showing Shallot's start page, so that is
+                // what its card should look like.
+                ShallotMark(layers: 3, tint: Palette.arterialSoft)
+                    .frame(width: 44, height: 44)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

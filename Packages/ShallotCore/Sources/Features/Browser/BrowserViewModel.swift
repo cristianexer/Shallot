@@ -69,6 +69,9 @@ public final class BrowserViewModel {
 
     public var securityLevel: SecurityLevel { settings.securityLevel }
 
+    /// Whether reload has anything to act on — including a page that failed.
+    public var canReload: Bool { activeTab?.canReload ?? false }
+
     public var canGoBack: Bool { activeTab?.canGoBack ?? false }
     public var canGoForward: Bool { activeTab?.canGoForward ?? false }
     public var loadProgress: Double { activeTab?.loadState.progress ?? 0 }
