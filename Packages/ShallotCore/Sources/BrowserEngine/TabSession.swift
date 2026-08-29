@@ -24,6 +24,12 @@ public final class TabSession: NSObject {
     private var attemptedUpgrades: Set<URL> = []
     /// What the leak-mitigation script was told to block, for the event log.
     private let mitigations: LeakMitigations.Configuration
+    /// True while the web view is showing one of our own error pages.
+    ///
+    /// An error page is a successful load as far as WebKit is concerned, so
+    /// without this the delegate callbacks would report the tab as finished and
+    /// the user's tab would look like a page that loaded fine.
+    private var isPresentingErrorPage = false
 
     init?(
         tab: BrowserTab,
@@ -101,6 +107,7 @@ public final class TabSession: NSObject {
     /// Loads `url`, refusing if the policy says so.
     public func load(_ url: URL) {
         attemptedUpgrades.removeAll()
+        isPresentingErrorPage = false
         let decision = NavigationPolicy.decide(
             NavigationPolicy.Context(
                 url: url,
@@ -157,7 +164,7 @@ public final class TabSession: NSObject {
         observations = [
             webView.observe(\.estimatedProgress, options: [.new]) { [weak self] webView, _ in
                 MainActor.assumeIsolated {
-                    guard let self, let tab = self.tab else { return }
+                    guard let self, let tab = self.tab, !self.isPresentingErrorPage else { return }
                     if webView.isLoading {
                         tab.loadState = .loading(progress: webView.estimatedProgress)
                     }
@@ -194,6 +201,7 @@ public final class TabSession: NSObject {
     }
 
     private func present(_ reason: NavigationBlockReason, for url: URL?) {
+        isPresentingErrorPage = true
         tab?.loadState = .failed(message: reason.title)
         engine?.report(.init(kind: reason.eventKind, message: reason.eventMessage))
         webView.loadHTMLString(ErrorPage.html(for: reason, url: url), baseURL: nil)
@@ -254,10 +262,12 @@ extension TabSession: WKNavigationDelegate {
     }
 
     public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        guard !isPresentingErrorPage else { return }
         tab?.loadState = .loading(progress: 0.05)
     }
 
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard !isPresentingErrorPage else { return }
         tab?.loadState = .finished
         if let url = webView.url, url.scheme != "about" {
             tab?.url = url
@@ -284,6 +294,7 @@ extension TabSession: WKNavigationDelegate {
         // A cancelled navigation is what our own policy does when it upgrades
         // or blocks; showing an error for it would overwrite the real message.
         guard nsError.code != NSURLErrorCancelled else { return }
+        isPresentingErrorPage = true
         tab?.loadState = .failed(message: nsError.localizedDescription)
         engine?.report(.init(kind: .failure, message: "load failed · \(nsError.localizedDescription)"))
         webView.loadHTMLString(

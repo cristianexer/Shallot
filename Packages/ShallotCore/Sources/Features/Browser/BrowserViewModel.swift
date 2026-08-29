@@ -174,9 +174,13 @@ public final class BrowserViewModel {
     /// Order matters: tear the web views down *first* so nothing is mid-flight
     /// on an old circuit when the new one is requested.
     public func newIdentity() async {
+        // The keys must be captured before the tabs are closed: reading
+        // `session.tabs` afterwards yields an empty list, and every per-tab
+        // SOCKS port would stay checked out until the pool ran dry.
+        let isolationKeys = tabs.map(\.isolationKey)
         await engine.destroyAllSessions()
         session.closeAllTabs()
-        for tab in tabs { await tor.releaseIsolation(tab.isolationKey) }
+        for key in isolationKeys { await tor.releaseIsolation(key) }
         do {
             try await tor.newIdentity()
         } catch {

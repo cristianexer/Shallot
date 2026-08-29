@@ -27,7 +27,7 @@ public final class SettingsViewModel {
         store: any SettingsStoring,
         appVersion: String,
         torVersion: @escaping () -> String,
-        transportAvailability: @escaping (BridgeTransport) -> Bool = { _ in false },
+        transportAvailability: @escaping (BridgeTransport) -> Bool = { !$0.requiresTransportProvider },
         onSettingsChanged: @escaping (AppSettings) async -> Void
     ) {
         self.store = store

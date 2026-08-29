@@ -50,7 +50,7 @@ public final class AppModel {
         monitorFeed: any MonitorFeeding,
         lock: any AppLocking,
         appVersion: String,
-        transportAvailability: @escaping (BridgeTransport) -> Bool = { _ in false }
+        transportAvailability: @escaping (BridgeTransport) -> Bool = { !$0.requiresTransportProvider }
     ) {
         self.tor = tor
         self.engine = engine

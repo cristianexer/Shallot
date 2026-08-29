@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// The omnibar and the tab overview.
@@ -86,14 +87,13 @@ final class BrowserUITests: XCTestCase {
         XCTAssertEqual(app.tabCountDescription, "1 open", "A fresh launch should have exactly one tab.")
 
         app.openTabOverview()
-        app.tapAddTabButton()
+        let tapped = app.tapAddTabButton()
 
         // Adding dismisses the sheet, so the count is read back from the
         // toolbar button's accessibility value.
-        XCTAssertTrue(
-            waitUntil("the tab count reaches two") { app.tabCountDescription == "2 open" },
-            "Adding a tab should be reflected in the tabs button. Was \(app.tabCountDescription ?? "nil")."
-        )
+        waitUntil("the tab count reaches two after tapping \(tapped)") {
+            app.tabCountDescription == "2 open"
+        }
     }
 
     @MainActor
@@ -101,8 +101,10 @@ final class BrowserUITests: XCTestCase {
         let app = launchShallot()
 
         app.openTabOverview()
-        app.tapAddTabButton()
-        XCTAssertTrue(waitUntil("the tab count reaches two") { app.tabCountDescription == "2 open" })
+        let tapped = app.tapAddTabButton()
+        waitUntil("the tab count reaches two after tapping \(tapped)") {
+            app.tabCountDescription == "2 open"
+        }
 
         app.openTabOverview()
         let closeButtons = app.elements(.button, labelled: "Close tab")
@@ -120,7 +122,7 @@ final class BrowserUITests: XCTestCase {
 
         XCTAssertTrue(
             waitUntil("the tab count falls back to one") { app.tabCountDescription == "1 open" },
-            "Closing a tab should be reflected in the tabs button. Was \(app.tabCountDescription ?? "nil")."
+            "Closing a tab should be reflected in the tabs button."
         )
     }
 }
@@ -179,20 +181,46 @@ extension XCUIApplication {
         )
     }
 
-    /// Taps the overview's "New tab" button.
+    /// Taps the overview's "New tab" button and describes what it tapped.
     ///
-    /// The label is not unique: a tab with no page yet is also announced as
-    /// "New tab", and the iPad sidebar carries one too. The overview's add
-    /// button is the last of them in the hierarchy — it sits below the rows,
-    /// inside the most recently presented view — and if that ever stopped
-    /// holding, the tab-count assertion in the caller would catch the mis-tap.
+    /// The label is not unique, and deliberately so: a tab with no page yet is
+    /// announced as "New tab" too, and the iPad sidebar carries its own. The
+    /// one wanted here is inside the overview — within the sheet's column,
+    /// below its rows — so it is picked by geometry rather than by hoping the
+    /// hierarchy orders them a particular way. The returned description is only
+    /// there to make a mis-tap legible in a failure message.
     @MainActor
-    func tapAddTabButton(file: StaticString = #filePath, line: UInt = #line) {
+    @discardableResult
+    func tapAddTabButton(file: StaticString = #filePath, line: UInt = #line) -> String {
+        let bar = navigationBars["Tabs"].frame
         let candidates = elements(.button, labelled: "New tab")
-        guard candidates.count > 0 else {
-            XCTFail("No New tab button in the overview.", file: file, line: line)
-            return
+
+        var chosen: XCUIElement?
+        var chosenFrame: CGRect = .null
+        var considered: [String] = []
+        for index in 0..<candidates.count {
+            let candidate = candidates.element(boundBy: index)
+            let frame = candidate.frame
+            considered.append("\(frame)")
+            let isInOverviewColumn = frame.minY > bar.minY
+                && frame.minX >= bar.minX - 1
+                && frame.maxX <= bar.maxX + 1
+            guard isInOverviewColumn else { continue }
+            if chosenFrame.isNull || frame.minY > chosenFrame.minY {
+                chosen = candidate
+                chosenFrame = frame
+            }
         }
-        candidates.element(boundBy: candidates.count - 1).tap()
+
+        guard let button = chosen else {
+            XCTFail(
+                "No New tab button inside the overview (bar \(bar), candidates \(considered)).",
+                file: file,
+                line: line
+            )
+            return "nothing"
+        }
+        button.tap()
+        return "the button at \(chosenFrame) of candidates \(considered)"
     }
 }
