@@ -6,6 +6,7 @@ import SwiftUI
 public struct FavouritesView: View {
     @Bindable var model: FavouritesViewModel
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @ScaledMetric(relativeTo: .body) private var cardWidth: CGFloat = 150
 
     public init(model: FavouritesViewModel) {
         self.model = model
@@ -77,7 +78,10 @@ public struct FavouritesView: View {
     }
 
     private var columns: [GridItem] {
-        [GridItem(.adaptive(minimum: sizeClass == .regular ? 220 : 150), spacing: Metrics.tightGutter)]
+        // Cards widen with the text they hold, so a long onion address is
+        // still elided rather than crushed at accessibility sizes.
+        let minimum = cardWidth * (sizeClass == .regular ? 1.45 : 1)
+        return [GridItem(.adaptive(minimum: minimum), spacing: Metrics.tightGutter)]
     }
 
     private func card(for favourite: Favourite) -> some View {

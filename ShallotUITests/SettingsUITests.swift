@@ -18,10 +18,11 @@ final class SettingsUITests: XCTestCase {
         let before = toggle.value as? String
         XCTAssertEqual(before, "1", "Block WebRTC ships on; the rest of this test assumes it.")
 
-        toggle.tap()
+        tap(toggle) { (toggle.value as? String) == "0" }
 
-        XCTAssertTrue(
-            waitUntil("Block WebRTC reads as off") { (toggle.value as? String) == "0" },
+        XCTAssertEqual(
+            toggle.value as? String,
+            "0",
             "Tapping the switch should change its value."
         )
     }
@@ -33,8 +34,7 @@ final class SettingsUITests: XCTestCase {
 
         let toggle = app.privacyToggle("Block DNS prefetching")
         XCTAssertEqual(toggle.value as? String, "1")
-        toggle.tap()
-        XCTAssertTrue(waitUntil("the switch reads as off") { (toggle.value as? String) == "0" })
+        tap(toggle) { (toggle.value as? String) == "0" }
 
         app.show(.monitor)
         app.show(.settings)
@@ -63,10 +63,10 @@ final class SettingsUITests: XCTestCase {
         let safest = app.buttons["Safest"]
         XCTAssertTrue(safest.waitForExistence(timeout: Timeout.element))
         app.scrollUntilHittable(safest)
-        safest.tap()
+        tap(safest) { app.explanation(startingWith: "Safest:").exists }
 
         XCTAssertTrue(
-            app.explanation(startingWith: "Safest:").waitForExistence(timeout: Timeout.transition),
+            app.explanation(startingWith: "Safest:").exists,
             "Choosing Safest should replace the explanation with the Safest one."
         )
         XCTAssertTrue(
@@ -79,9 +79,9 @@ final class SettingsUITests: XCTestCase {
         // And back again, so the control is shown to work in both directions.
         let standard = app.buttons["Standard"]
         app.scrollUntilHittable(standard)
-        standard.tap()
+        tap(standard) { app.explanation(startingWith: "Standard:").exists }
         XCTAssertTrue(
-            app.explanation(startingWith: "Standard:").waitForExistence(timeout: Timeout.transition),
+            app.explanation(startingWith: "Standard:").exists,
             "Choosing Standard should update the explanation again."
         )
     }
@@ -94,8 +94,7 @@ final class SettingsUITests: XCTestCase {
         let safest = app.buttons["Safest"]
         XCTAssertTrue(safest.waitForExistence(timeout: Timeout.element))
         app.scrollUntilHittable(safest)
-        safest.tap()
-        XCTAssertTrue(app.explanation(startingWith: "Safest:").waitForExistence(timeout: Timeout.transition))
+        tap(safest) { app.explanation(startingWith: "Safest:").exists }
 
         app.show(.browse)
         app.show(.settings)

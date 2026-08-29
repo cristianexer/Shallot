@@ -11,6 +11,9 @@ public struct StartPage: View {
     var onAdd: () -> Void
 
     @Environment(\.horizontalSizeClass) private var sizeClass
+    // Scales with Dynamic Type, so at accessibility sizes the grid drops to
+    // fewer, wider columns instead of truncating every name to "Secur…".
+    @ScaledMetric(relativeTo: .caption2) private var tileWidth: CGFloat = 74
 
     public init(
         circuitSummary: String,
@@ -104,9 +107,14 @@ public struct StartPage: View {
     }
 
     private var columns: [GridItem] {
-        // Four across on a phone, more on iPad, and it reflows rather than
-        // clipping when Dynamic Type grows the labels.
-        [GridItem(.adaptive(minimum: sizeClass == .regular ? 96 : 74), spacing: Metrics.tightGutter)]
+        // Four across on a phone at the default text size, more on iPad, and
+        // fewer as the text grows — the column width is what reflows, so the
+        // names stay readable instead of being truncated.
+        // Clamped so the largest accessibility sizes still get two columns
+        // rather than collapsing to one and turning a seven-item grid into a
+        // long scroll.
+        let minimum = min(tileWidth, 168) * (sizeClass == .regular ? 1.3 : 1)
+        return [GridItem(.adaptive(minimum: minimum), spacing: Metrics.tightGutter)]
     }
 
     private func tile(monogram: String, name: String, isAdd: Bool) -> some View {

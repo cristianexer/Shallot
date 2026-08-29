@@ -209,6 +209,34 @@ func waitUntil(
     return false
 }
 
+/// Taps `element` and waits for `condition`, trying twice before failing.
+///
+/// A tap that lands while a screen is still settling — the iPad's detail column
+/// swapping in, a scroll view still decelerating — is occasionally dropped
+/// before SwiftUI has installed the gesture. The second attempt separates that
+/// from a control that genuinely does nothing, which fails both times.
+@MainActor
+@discardableResult
+func tap(
+    _ element: XCUIElement,
+    attempts: Int = 2,
+    timeout: TimeInterval = Timeout.brief,
+    file: StaticString = #filePath,
+    line: UInt = #line,
+    until condition: () -> Bool
+) -> Bool {
+    for _ in 0..<attempts {
+        element.tap()
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() { return true }
+            _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.2))
+        }
+    }
+    XCTFail("The control did not respond to \(attempts) taps.", file: file, line: line)
+    return false
+}
+
 extension XCUIApplication {
     /// Scrolls the frontmost scroll view until `element` can be tapped.
     ///
