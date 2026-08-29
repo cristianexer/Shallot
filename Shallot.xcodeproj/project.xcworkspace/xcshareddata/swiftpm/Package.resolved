@@ -1,0 +1,33 @@
+{
+  "originHash" : "a2a35fd7cbc2076071283a3bdd58bea4f6087c21ada39b3dceef5dda98ea9be6",
+  "pins" : [
+    {
+      "identity" : "swift-event",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/21-DOT-DEV/swift-event.git",
+      "state" : {
+        "revision" : "9692104e590852d8237e510fc8f69206cbd992b1",
+        "version" : "0.2.1"
+      }
+    },
+    {
+      "identity" : "swift-openssl",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/21-DOT-DEV/swift-openssl.git",
+      "state" : {
+        "revision" : "7fbb4643b6945466fcdc42480ed7b9e6d53910a8",
+        "version" : "0.1.5"
+      }
+    },
+    {
+      "identity" : "swift-tor",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/21-DOT-DEV/swift-tor.git",
+      "state" : {
+        "revision" : "db9e0d802c4015fd4d21cd5e8cd9178f856087f1",
+        "version" : "0.1.1"
+      }
+    }
+  ],
+  "version" : 3
+}

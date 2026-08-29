@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Shallot — UI Prototype</title>
+<style>
+  :root{
+    --void:#0a0206; --void-2:#13040b;
+    --blood:#8b0000; --arterial:#ff123d; --arterial-soft:#ff5069;
+    --rain:#ff2b45; --bone:#f4e9ec; --ash:#a3777f;
+    --glass:rgba(24,6,12,.46); --glass-2:rgba(34,9,17,.58);
+    --edge:rgba(255,255,255,.14); --edge-red:rgba(255,120,140,.30);
+    --glow:rgba(255,18,61,.45);
+    --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    background:
+      radial-gradient(120% 80% at 50% -10%, #2a0410 0%, var(--void) 55%, #050103 100%);
+    color:var(--bone); font-family:var(--sans);
+    display:flex; align-items:center; justify-content:center;
+    overflow:hidden;
+  }
+
+  /* ---------- device / app shell ---------- */
+  .app{
+    position:relative; width:100%; max-width:432px; height:100dvh; max-height:940px;
+    overflow:hidden; isolation:isolate; background:var(--void);
+  }
+  @media (min-width:520px){
+    .app{border-radius:44px; border:1px solid rgba(255,90,110,.14);
+      box-shadow:0 40px 120px rgba(0,0,0,.7), 0 0 0 1px rgba(0,0,0,.6) inset;}
+  }
+
+  #rain{position:absolute; inset:0; z-index:0; opacity:.55}
+  .vignette{position:absolute; inset:0; z-index:1; pointer-events:none;
+    background:
+      radial-gradient(130% 90% at 50% 0%, transparent 30%, rgba(5,1,3,.55) 78%, rgba(5,1,3,.92) 100%),
+      linear-gradient(180deg, rgba(10,2,6,.55), transparent 18%, transparent 80%, rgba(10,2,6,.7));}
+  .scan{position:absolute; inset:0; z-index:2; pointer-events:none; opacity:.05;
+    background:repeating-linear-gradient(0deg, #fff 0 1px, transparent 1px 3px);
+    mix-blend-mode:overlay;}
+
+  /* ---------- glass ---------- */
+  .glass{
+    position:relative; background:var(--glass);
+    -webkit-backdrop-filter:blur(24px) saturate(150%); backdrop-filter:blur(24px) saturate(150%);
+    border:1px solid var(--edge);
+    box-shadow:0 12px 34px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.13),
+               inset 0 0 0 .5px var(--edge-red);
+  }
+  .glass::before{content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+    background:linear-gradient(158deg, rgba(255,255,255,.11), rgba(255,255,255,0) 42%);}
+
+  /* ---------- status bar ---------- */
+  .status{position:relative; z-index:6; display:flex; align-items:center; justify-content:space-between;
+    padding:14px 24px 6px; font-family:var(--mono); font-size:13px; letter-spacing:.5px; color:var(--bone);}
+  .status .r{display:flex; gap:7px; align-items:center; opacity:.85}
+  .status .tor{display:flex; gap:6px; align-items:center; font-size:10.5px; color:var(--arterial-soft); letter-spacing:1.5px}
+  .dot{width:7px; height:7px; border-radius:50%; background:var(--arterial);
+    box-shadow:0 0 10px var(--glow); animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  svg{display:block}
+
+  /* ---------- scroll region ---------- */
+  .screens{position:absolute; inset:0; z-index:4; overflow:hidden}
+  .screen{position:absolute; inset:0; overflow-y:auto; overflow-x:hidden;
+    padding:0 18px 120px; -webkit-overflow-scrolling:touch;
+    opacity:0; transform:translateY(8px); pointer-events:none; transition:opacity .28s ease, transform .28s ease;}
+  .screen.active{opacity:1; transform:none; pointer-events:auto}
+  .screen::-webkit-scrollbar{display:none}
+  .spacer{height:58px}
+
+  /* sticky glass header inside a screen */
+  .head{position:sticky; top:0; z-index:5; margin:0 -18px 12px; padding:40px 18px 10px;
+    -webkit-backdrop-filter:blur(20px) saturate(150%); backdrop-filter:blur(20px) saturate(150%);
+    background:linear-gradient(180deg, rgba(10,2,6,.72), rgba(10,2,6,.28) 78%, transparent);}
+  .kicker{font-family:var(--mono); font-size:11px; letter-spacing:3px; color:var(--arterial-soft); text-transform:uppercase}
+  .title{font-family:var(--mono); font-size:26px; letter-spacing:2px; margin:2px 0 0; font-weight:600}
+  .sub{font-size:12.5px; color:var(--ash); margin-top:4px; line-height:1.4}
+
+  /* ---------- browser ---------- */
+  .omni{display:flex; align-items:center; gap:5px}
+  .obtn{width:29px; height:29px; flex:none; border:0; cursor:pointer; border-radius:10px;
+    display:grid; place-items:center; color:var(--ash); background:transparent}
+  .obtn.acc{color:var(--arterial-soft)}
+  .obtn:active{background:rgba(255,255,255,.06)}
+  .addr{flex:1; min-width:0; display:flex; align-items:center; gap:8px; border-radius:14px; padding:6px 10px; cursor:pointer}
+  .addr .shield{width:24px;height:24px;border-radius:8px;display:grid;place-items:center;
+    background:rgba(255,18,61,.14); border:1px solid var(--edge-red); flex:none}
+  .addr .field{flex:1; min-width:0; font-family:var(--mono); font-size:12.5px; color:var(--bone);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .addr .field .ph{color:var(--ash)}
+  .addr .field .host{color:var(--bone)} .addr .field .tld{color:var(--arterial-soft)}
+
+  .hero{padding:26px 4px 6px; text-align:center}
+  .wordmark{font-family:var(--mono); font-size:40px; letter-spacing:8px; font-weight:600;
+    background:linear-gradient(180deg,#fff,#ff6d82 60%,#8b0000);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    text-shadow:0 0 34px rgba(255,18,61,.35)}
+  .tagline{font-size:12.5px; color:var(--ash); margin-top:8px; letter-spacing:.3px}
+  .circuit-chip{display:inline-flex; align-items:center; gap:9px; margin-top:16px; padding:8px 14px;
+    border-radius:100px; font-family:var(--mono); font-size:11px; letter-spacing:1px; color:var(--bone)}
+  .hops{display:flex; gap:4px}
+  .hops i{width:6px;height:6px;border-radius:50%;background:var(--arterial);box-shadow:0 0 8px var(--glow)}
+  .hops i:nth-child(2){animation:pulse 2s .3s infinite} .hops i:nth-child(3){animation:pulse 2s .6s infinite}
+
+  .label{font-family:var(--mono); font-size:11px; letter-spacing:2.5px; color:var(--ash);
+    text-transform:uppercase; margin:26px 4px 12px}
+  .grid{display:grid; grid-template-columns:repeat(4,1fr); gap:11px}
+  .tile{aspect-ratio:1; border-radius:20px; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:8px; cursor:pointer; padding:8px; transition:transform .15s ease}
+  .tile:active{transform:scale(.94)}
+  .tile .mono{width:38px;height:38px;border-radius:13px;display:grid;place-items:center;
+    font-family:var(--mono); font-weight:700; font-size:15px; color:var(--bone);
+    background:linear-gradient(150deg, rgba(255,18,61,.22), rgba(139,0,0,.28)); border:1px solid var(--edge-red)}
+  .tile .nm{font-size:10px; color:var(--ash); text-align:center; letter-spacing:.2px; line-height:1.1}
+  .tile.add .mono{background:transparent; color:var(--arterial-soft); font-size:22px}
+
+  /* loaded page mock */
+  .page{display:none}
+  .app[data-loaded="1"] #startview{display:none}
+  .app[data-loaded="1"] .page{display:block}
+  .page-card{border-radius:22px; padding:18px; margin-top:4px}
+  .loadbar{position:absolute; left:18px; right:18px; bottom:5px; height:2px; border-radius:2px;
+    background:linear-gradient(90deg,var(--blood),var(--arterial)); box-shadow:0 0 8px var(--glow);
+    transform:scaleX(0); transform-origin:left; opacity:0; pointer-events:none}
+  /* rendered webpage */
+  .site{margin:0 -18px; padding:18px 20px 34px; background:#0e0b0d}
+  .site-top{display:flex; justify-content:space-between; align-items:center; padding-bottom:13px;
+    margin-bottom:18px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .site-logo{font-family:Georgia,"Times New Roman",serif; font-weight:700; font-size:15px; letter-spacing:.3px; color:#f4f1f2}
+  .site-secure{font-family:var(--mono); font-size:9px; letter-spacing:.5px; color:var(--arterial-soft); display:flex; gap:5px; align-items:center}
+  .eyebrow{font-family:var(--mono); font-size:10px; letter-spacing:2px; color:var(--arterial-soft); text-transform:uppercase}
+  .site h1{font-family:Georgia,"Times New Roman",serif; font-size:25px; line-height:1.22; color:#f5f2f3; margin:8px 0 0; font-weight:700}
+  .byline{font-family:var(--mono); font-size:10.5px; letter-spacing:.3px; color:#9a8f94; margin-top:10px}
+  .lede{font-family:Georgia,serif; font-size:16.5px; line-height:1.55; color:#e6e1e3; margin:16px 0 0}
+  .figure{height:150px; border-radius:12px; margin-top:18px; border:1px solid rgba(255,255,255,.07); position:relative; overflow:hidden;
+    background:linear-gradient(135deg,#3a0713,#170b10 55%,#241a1e)}
+  .figure.alt{background:linear-gradient(135deg,#1c1f26,#101216 60%,#0c0d10)}
+  .figure::after{content:""; position:absolute; inset:0; background:repeating-linear-gradient(115deg,rgba(255,255,255,.03) 0 2px,transparent 2px 9px)}
+  .figcap{font-family:var(--mono); font-size:10.5px; color:#9a8f94; margin-top:7px}
+  .site p{font-family:Georgia,serif; font-size:15.5px; line-height:1.75; color:#cbc4c7; margin:15px 0 0}
+  .site h2{font-family:Georgia,serif; font-size:19px; line-height:1.3; color:#efeaec; margin:26px 0 0; font-weight:700}
+  .site blockquote{margin:20px 0 0; padding:2px 0 2px 15px; border-left:2px solid var(--arterial);
+    font-family:Georgia,serif; font-style:italic; font-size:18px; line-height:1.5; color:#efeaec}
+  .site ul{margin:14px 0 0; padding-left:20px}
+  .site li{font-family:Georgia,serif; font-size:15px; line-height:1.7; color:#cbc4c7; margin:7px 0}
+  .site-foot{margin-top:30px; padding-top:15px; border-top:1px solid rgba(255,255,255,.08);
+    font-family:var(--mono); font-size:10px; letter-spacing:.4px; color:#9a8f94; text-align:center}
+
+  /* ---------- saved ---------- */
+  .warn{display:flex; gap:10px; align-items:flex-start; border-radius:16px; padding:12px 13px; margin-bottom:16px;
+    background:rgba(255,18,61,.07); border:1px solid var(--edge-red); font-size:11.5px; color:#e7c9ce; line-height:1.4}
+  .warn b{color:var(--arterial-soft); font-family:var(--mono); font-size:10px; letter-spacing:1px; display:block; margin-bottom:2px}
+  .savgrid{display:grid; grid-template-columns:1fr 1fr; gap:11px}
+  .fav{border-radius:18px; padding:14px; cursor:pointer; transition:transform .15s ease}
+  .fav:active{transform:scale(.97)}
+  .fav .top{display:flex; align-items:center; justify-content:space-between}
+  .fav .mono{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;font-family:var(--mono);
+    font-weight:700;font-size:14px;color:var(--bone);background:linear-gradient(150deg,rgba(255,18,61,.2),rgba(139,0,0,.26));border:1px solid var(--edge-red)}
+  .tag{font-family:var(--mono); font-size:8.5px; letter-spacing:1px; padding:3px 7px; border-radius:100px}
+  .tag.onion{color:var(--arterial-soft); border:1px solid var(--edge-red); background:rgba(255,18,61,.08)}
+  .tag.web{color:var(--ash); border:1px solid var(--edge)}
+  .fav .nm{font-size:13px; margin-top:12px; letter-spacing:.2px}
+  .fav .url{font-family:var(--mono); font-size:10px; color:var(--ash); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+
+  /* ---------- monitor ---------- */
+  .chain{border-radius:20px; padding:18px 16px; margin-bottom:14px}
+  .node{display:flex; align-items:center; gap:13px; padding:9px 0; position:relative}
+  .node .ic{width:34px;height:34px;border-radius:12px;flex:none;display:grid;place-items:center;font-family:var(--mono);
+    font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--bone);
+    background:linear-gradient(150deg,rgba(255,18,61,.2),rgba(139,0,0,.24));border:1px solid var(--edge-red)}
+  .node.you .ic,.node.dest .ic{background:rgba(255,255,255,.05); color:var(--ash); border:1px solid var(--edge)}
+  .node .info{flex:1; min-width:0}
+  .node .info .a{font-family:var(--mono); font-size:12.5px; letter-spacing:.3px}
+  .node .info .b{font-size:11px; color:var(--ash); margin-top:1px}
+  .node .ms{font-family:var(--mono); font-size:11px; color:var(--arterial-soft)}
+  .wire{position:absolute; left:16px; top:34px; width:2px; height:26px; background:rgba(255,90,110,.25); overflow:hidden}
+  .wire::after{content:""; position:absolute; left:0; top:-30%; width:100%; height:30%;
+    background:linear-gradient(180deg,transparent,var(--arterial),transparent); animation:flow 1.6s linear infinite}
+  @keyframes flow{to{top:130%}}
+
+  .metrics{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:14px}
+  .metric{border-radius:16px; padding:13px 12px}
+  .metric .v{font-family:var(--mono); font-size:20px; color:var(--bone); letter-spacing:.5px}
+  .metric .v b{color:var(--arterial-soft); font-weight:600}
+  .metric .k{font-family:var(--mono); font-size:9px; letter-spacing:1.5px; color:var(--ash); text-transform:uppercase; margin-top:4px}
+
+  .bw{border-radius:16px; padding:14px 14px 10px; margin-bottom:14px}
+  .bw .cap{display:flex; justify-content:space-between; font-family:var(--mono); font-size:10px; letter-spacing:1px; color:var(--ash); margin-bottom:8px}
+  .bw .cap b{color:var(--arterial-soft)}
+
+  .term{border-radius:16px; padding:14px; font-family:var(--mono); font-size:11px; line-height:1.9; margin-bottom:14px}
+  .term .ln{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .term .t{color:var(--ash)} .term .ok{color:#57d98a} .term .no{color:var(--arterial-soft)} .term .nu{color:#e7c9ce}
+
+  .actions{display:flex; gap:10px}
+  .btn{flex:1; border:0; cursor:pointer; border-radius:16px; padding:14px 0; font-family:var(--mono);
+    font-size:11px; letter-spacing:1.5px; color:var(--arterial-soft); background:var(--glass);
+    border:1px solid var(--edge-red); transition:transform .12s ease}
+  .btn:active{transform:scale(.97)}
+  .btn.solid{color:#fff; background:linear-gradient(150deg,var(--arterial),#a30020); border:1px solid rgba(255,120,140,.4);
+    box-shadow:0 8px 24px var(--glow)}
+
+  /* ---------- settings ---------- */
+  .sect{font-family:var(--mono); font-size:10px; letter-spacing:2.5px; color:var(--ash); text-transform:uppercase; margin:22px 6px 10px}
+  .group{border-radius:18px; overflow:hidden}
+  .row{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:15px 16px; position:relative}
+  .row + .row::before{content:""; position:absolute; top:0; left:16px; right:0; height:1px; background:var(--edge)}
+  .row .l{font-size:13.5px} .row .l small{display:block; color:var(--ash); font-size:11px; margin-top:2px; font-family:var(--sans)}
+  .row .val{font-family:var(--mono); font-size:12px; color:var(--arterial-soft)}
+
+  .toggle{width:46px; height:28px; border-radius:100px; background:rgba(255,255,255,.08); border:1px solid var(--edge);
+    position:relative; cursor:pointer; flex:none; transition:background .2s ease, border-color .2s ease}
+  .toggle::after{content:""; position:absolute; top:2px; left:2px; width:22px; height:22px; border-radius:50%;
+    background:var(--bone); transition:transform .2s ease}
+  .toggle.on{background:linear-gradient(150deg,var(--arterial),#a30020); border-color:rgba(255,120,140,.5); box-shadow:0 0 16px var(--glow)}
+  .toggle.on::after{transform:translateX(18px)}
+
+  .seg{display:flex; padding:4px; border-radius:16px; gap:4px; margin:2px 0 8px}
+  .seg button{flex:1; border:0; cursor:pointer; background:transparent; color:var(--ash); font-family:var(--mono);
+    font-size:11px; letter-spacing:1px; padding:11px 0; border-radius:12px; transition:.18s ease}
+  .seg button.on{color:#fff; background:linear-gradient(150deg,var(--arterial),#a30020); box-shadow:0 6px 18px var(--glow)}
+  .segdesc{font-size:12px; color:var(--ash); padding:0 6px 4px; line-height:1.45; min-height:34px}
+
+  .honesty{border-radius:16px; padding:14px; margin-top:16px; font-size:12px; line-height:1.5; color:#e7c9ce;
+    background:rgba(255,18,61,.06); border:1px solid var(--edge-red)}
+  .honesty b{font-family:var(--mono); font-size:10px; letter-spacing:1px; color:var(--arterial-soft); display:block; margin-bottom:4px}
+
+  /* ---------- tab bar ---------- */
+  .tabbar{position:absolute; left:16px; right:16px; bottom:12px; z-index:7; display:flex; border-radius:19px; padding:4px}
+  .tab{flex:1; border:0; background:transparent; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    padding:9px 0; color:var(--ash); transition:color .2s ease}
+  .tab svg{width:21px; height:21px}
+  .tab.on{color:var(--arterial-soft)}
+  .tab.on svg{filter:drop-shadow(0 0 8px var(--glow))}
+
+  /* ---------- toast ---------- */
+  .toast{position:absolute; left:50%; bottom:104px; transform:translate(-50%,20px); z-index:9; opacity:0;
+    padding:12px 18px; border-radius:100px; font-family:var(--mono); font-size:11.5px; letter-spacing:.5px;
+    color:var(--bone); pointer-events:none; transition:opacity .25s ease, transform .25s ease; white-space:nowrap}
+  .toast.show{opacity:1; transform:translate(-50%,0)}
+  .toast b{color:var(--arterial-soft)}
+
+  @media (prefers-reduced-motion: reduce){
+    #rain{opacity:.28} .dot,.hops i,.wire::after{animation:none}
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app" data-loaded="0">
+  <canvas id="rain"></canvas>
+  <div class="vignette"></div>
+  <div class="scan"></div>
+
+  <div class="status">
+    <span>23:47</span>
+    <span class="tor"><span class="dot"></span>TOR · ANONYMOUS</span>
+    <span class="r">
+      <svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="7" width="3" height="5" rx="1" fill="#f4e9ec"/><rect x="4" y="4.5" width="3" height="7.5" rx="1" fill="#f4e9ec"/><rect x="8" y="2" width="3" height="10" rx="1" fill="#f4e9ec"/><rect x="12" y="0" width="3" height="12" rx="1" fill="#f4e9ec" opacity=".35"/></svg>
+      <svg width="22" height="12" viewBox="0 0 22 12"><rect x="0" y="0" width="19" height="12" rx="3" fill="none" stroke="#f4e9ec" opacity=".5"/><rect x="2" y="2" width="13" height="8" rx="1.5" fill="#ff123d"/><rect x="20" y="4" width="2" height="4" rx="1" fill="#f4e9ec" opacity=".5"/></svg>
+    </span>
+  </div>
+
+  <div class="screens">
+
+    <!-- ============ BROWSER ============ -->
+    <section class="screen active" data-screen="browser">
+      <div class="head">
+        <div class="omni">
+          <button class="obtn" onclick="setLoaded(0)" aria-label="Back"><svg width="8" height="13" viewBox="0 0 8 13"><path d="M6.5 1 1.5 6.5l5 5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button class="obtn" aria-label="Forward"><svg width="8" height="13" viewBox="0 0 8 13"><path d="M1.5 1 6.5 6.5l-5 5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <div class="addr glass" id="pill" onclick="toggleLoaded()">
+            <div class="shield">
+              <svg width="13" height="15" viewBox="0 0 15 17"><path d="M7.5 1 13 3.2v5.3c0 3.6-2.4 6.4-5.5 7.5C4.4 14.9 2 12.1 2 8.5V3.2L7.5 1Z" fill="none" stroke="#ff5069" stroke-width="1.3"/><path d="M5 8.4l1.8 1.8L10 6.6" fill="none" stroke="#ff5069" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </div>
+            <div class="field" id="field"><span class="ph">Search or enter .onion address</span></div>
+          </div>
+          <button class="obtn" onclick="toast('Reloading over Tor')" aria-label="Reload"><svg width="14" height="14" viewBox="0 0 15 15"><path d="M13 7.5a5.5 5.5 0 1 1-1.6-3.9M13 1.5v3h-3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button class="obtn acc" onclick="newIdentity()" aria-label="New identity"><svg width="17" height="13" viewBox="0 0 24 16"><path d="M2 4.2C2 2.6 3.3 2 5 2.5c1.8.5 2.9 1 7 1s5.2-.5 7-1c1.7-.5 3 .1 3 1.7 0 5.1-3.2 8.6-7 8.6-2 0-2.8-1.2-3-1.2s-1 1.2-3 1.2C5.2 12.8 2 9.3 2 4.2Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="8" cy="6.6" r="1.3" fill="currentColor"/><circle cx="16" cy="6.6" r="1.3" fill="currentColor"/></svg></button>
+        </div>
+        <div class="loadbar" id="loadbar"></div>
+      </div>
+
+      <!-- start page -->
+      <div id="startview">
+        <div class="hero">
+          <div class="wordmark">SHALLOT</div>
+          <div class="tagline">Onion routing, wrapped in glass.</div>
+          <div class="circuit-chip glass">
+            <span class="hops"><i></i><i></i><i></i></span> CIRCUIT ESTABLISHED · DE → NL → FR
+          </div>
+        </div>
+        <div class="label">Quick access</div>
+        <div class="grid">
+          <div class="tile" onclick="openFav('DuckDuckGo')"><div class="mono">DG</div><div class="nm">DuckDuckGo</div></div>
+          <div class="tile" onclick="openFav('ProPublica')"><div class="mono">PP</div><div class="nm">ProPublica</div></div>
+          <div class="tile" onclick="openFav('SecureDrop')"><div class="mono">SD</div><div class="nm">SecureDrop</div></div>
+          <div class="tile" onclick="openFav('Tor Project')"><div class="mono">TP</div><div class="nm">Tor Project</div></div>
+          <div class="tile" onclick="openFav('Proton')"><div class="mono">PM</div><div class="nm">Proton Mail</div></div>
+          <div class="tile" onclick="openFav('BBC')"><div class="mono">BB</div><div class="nm">BBC News</div></div>
+          <div class="tile" onclick="openFav('Archive')"><div class="mono">AR</div><div class="nm">Archive</div></div>
+          <div class="tile add" onclick="go('saved')"><div class="mono">+</div><div class="nm">Add</div></div>
+        </div>
+      </div>
+
+      <!-- loaded page -->
+      <div class="page">
+        <div class="site">
+          <div class="site-top">
+            <div class="site-logo">The Dispatch</div>
+            <div class="site-secure">
+              <svg width="9" height="11" viewBox="0 0 9 11"><path d="M1.2 5V3.4a3.3 3.3 0 0 1 6.6 0V5M.8 5h7.4v5.2H.8Z" fill="none" stroke="#ff5069" stroke-width="1"/></svg>
+              ONION · VERIFIED
+            </div>
+          </div>
+
+          <div class="eyebrow">Investigation</div>
+          <h1>How the network keeps a source anonymous</h1>
+          <div class="byline">By the Security Desk · 12 min read · updated today</div>
+          <p class="lede">Every request you make here is wrapped in three layers of encryption and bounced through volunteers around the world before it reaches us. Here is what that actually protects — and what it doesn’t.</p>
+
+          <div class="figure"></div>
+          <div class="figcap">Fig 1 — Traffic leaves your device already encrypted three times over.</div>
+
+          <p>When you open a page over an anonymity network, your device does not talk to the destination directly. It builds a path through three separate relays. The first knows who you are but not where you are going. The last knows the destination but not who sent the request. No single point on the path can see both ends at once.</p>
+          <p>That separation is the whole point. A network operator watching your connection sees only that you are talking to the first relay, and even that looks like ordinary encrypted noise. Your address, your location, and the sites you visit stay held apart from one another.</p>
+
+          <h2>Why the entry point matters most</h2>
+          <p>The first relay — the guard — is the one part of the path your device keeps for a while rather than swapping on every request. Holding it steady is deliberate: rotating it constantly would give an observer more chances to notice you, not fewer. It is a rare case where doing something less often is the safer choice.</p>
+
+          <blockquote>“The system is not trying to hide that you are using it. It is trying to make sure that using it tells no one anything useful.”</blockquote>
+
+          <p>Each relay peels off one layer of encryption, like the layers of an onion, and passes the request along. By the time it arrives, nothing in the request points back to you. The replies travel the same path in reverse, and are reassembled only on your device.</p>
+
+          <div class="figure alt"></div>
+          <div class="figcap">Fig 2 — Each hop removes exactly one layer and learns nothing about the others.</div>
+
+          <h2>What it protects, and what it can’t</h2>
+          <p>Anonymity at the network layer is strong, but it is not the same as being invisible. A few things still deserve care:</p>
+          <ul>
+            <li>Logging in to a personal account links this session to your real identity — the network cannot undo that.</li>
+            <li>Files opened outside the browser may reach out over an ordinary connection and reveal your address.</li>
+            <li>The way a browser renders a page can be measured, so the more it blends in with everyone else, the better.</li>
+          </ul>
+          <p>Used carefully, though, the result is genuinely powerful: a way to read, research, and send information without handing over who you are or where you sit. The rest is a matter of habit — and of trusting the layers to do their quiet work.</p>
+
+          <div class="site-foot">Loaded over Tor · no trackers · your address was never shared</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ SAVED / FAVOURITES ============ -->
+    <section class="screen" data-screen="saved">
+      <div class="head">
+        <div class="kicker">Local · Encrypted</div>
+        <h1 class="title">FAVOURITES</h1>
+        <div class="sub">Stored on-device only. No cloud sync — sync is a way to be identified.</div>
+      </div>
+      <div class="warn">
+        <div><b>VERIFY BEFORE TRUSTING</b>Onion addresses can change or be spoofed. A saved favourite is trusted; a fresh link is not.</div>
+      </div>
+      <div class="sect" style="margin-top:4px">Onion services</div>
+      <div class="savgrid">
+        <div class="fav glass"><div class="top"><div class="mono">SD</div><span class="tag onion">ONION</span></div><div class="nm">SecureDrop</div><div class="url">sdolvtfhatvsysc6l4…onion</div></div>
+        <div class="fav glass"><div class="top"><div class="mono">PP</div><span class="tag onion">ONION</span></div><div class="nm">ProPublica</div><div class="url">p53lf57qovyuvwsc6…onion</div></div>
+        <div class="fav glass"><div class="top"><div class="mono">TP</div><span class="tag onion">ONION</span></div><div class="nm">Tor Project</div><div class="url">2gzyxa5ihm7nsggfx…onion</div></div>
+        <div class="fav glass"><div class="top"><div class="mono">PM</div><span class="tag onion">ONION</span></div><div class="nm">Proton Mail</div><div class="url">protonmailrmez3lo…onion</div></div>
+      </div>
+      <div class="sect">Clearnet</div>
+      <div class="savgrid">
+        <div class="fav glass"><div class="top"><div class="mono">DG</div><span class="tag web">HTTPS</span></div><div class="nm">DuckDuckGo</div><div class="url">duckduckgo.com</div></div>
+        <div class="fav glass"><div class="top"><div class="mono">BB</div><span class="tag web">HTTPS</span></div><div class="nm">BBC News</div><div class="url">bbc.co.uk</div></div>
+      </div>
+    </section>
+
+    <!-- ============ MONITOR ============ -->
+    <section class="screen" data-screen="monitor">
+      <div class="head">
+        <div class="kicker"><span style="color:var(--arterial)">●</span> Live</div>
+        <h1 class="title">MONITOR</h1>
+        <div class="sub">Everything here is measured on-device. Shallot never reports your activity anywhere.</div>
+      </div>
+
+      <div class="chain glass" id="chain">
+        <div class="node you"><div class="ic">YOU</div><div class="info"><div class="a">This device</div><div class="b">entry into the network</div></div><div class="wire"></div></div>
+        <div class="node"><div class="ic" data-cc>DE</div><div class="info"><div class="a">Guard · <span data-relay>frankfurtnode</span></div><div class="b" data-country>Germany</div></div><div class="ms"><span data-ms>51</span>ms</div><div class="wire"></div></div>
+        <div class="node"><div class="ic" data-cc>NL</div><div class="info"><div class="a">Relay · <span data-relay>amsix-mid</span></div><div class="b" data-country>Netherlands</div></div><div class="ms"><span data-ms>88</span>ms</div><div class="wire"></div></div>
+        <div class="node"><div class="ic" data-cc>FR</div><div class="info"><div class="a">Exit · <span data-relay>parisexit9</span></div><div class="b" data-country>France</div></div><div class="ms"><span data-ms>120</span>ms</div><div class="wire"></div></div>
+        <div class="node dest"><div class="ic">◈</div><div class="info"><div class="a">Destination</div><div class="b">securedrop.onion</div></div></div>
+      </div>
+
+      <div class="metrics">
+        <div class="metric glass"><div class="v"><b>100</b>%</div><div class="k">Bootstrap</div></div>
+        <div class="metric glass"><div class="v"><b id="mCirc">4</b></div><div class="k">Circuits</div></div>
+        <div class="metric glass"><div class="v"><b id="mStr">7</b></div><div class="k">Streams</div></div>
+      </div>
+
+      <div class="bw glass">
+        <div class="cap"><span>BANDWIDTH</span><span><b id="bwDn">▼ 214</b> · <span id="bwUp">▲ 38</span> KB/S</span></div>
+        <canvas id="spark" height="46"></canvas>
+      </div>
+
+      <div class="term glass" id="term">
+        <div class="ln"><span class="t">23:47:02</span> <span class="ok">✓</span> <span class="nu">DNS resolved via Tor — no leak</span></div>
+        <div class="ln"><span class="t">23:47:01</span> <span class="no">⛌</span> <span class="nu">WebRTC probe blocked</span></div>
+        <div class="ln"><span class="t">23:46:58</span> <span class="no">⛌</span> <span class="nu">tracker blocked · doubleclick.net</span></div>
+        <div class="ln"><span class="t">23:46:55</span> <span class="ok">↻</span> <span class="nu">circuit built · 3 hops</span></div>
+        <div class="ln"><span class="t">23:46:51</span> <span class="ok">✓</span> <span class="nu">HTTPS upgraded · securedrop.onion</span></div>
+      </div>
+
+      <div class="actions">
+        <button class="btn" onclick="newIdentity()">NEW IDENTITY</button>
+        <button class="btn solid" onclick="newCircuit()">NEW CIRCUIT</button>
+      </div>
+    </section>
+
+    <!-- ============ SETTINGS ============ -->
+    <section class="screen" data-screen="settings">
+      <div class="head">
+        <div class="kicker">Configuration</div>
+        <h1 class="title">SETTINGS</h1>
+      </div>
+
+      <div class="sect" style="margin-top:2px">Security level</div>
+      <div class="seg glass" id="seg">
+        <button onclick="setLevel(0)">STANDARD</button>
+        <button class="on" onclick="setLevel(1)">SAFER</button>
+        <button onclick="setLevel(2)">SAFEST</button>
+      </div>
+      <div class="segdesc" id="segdesc">Safer: risky scripts and some fonts are disabled. A balance of usability and protection.</div>
+
+      <div class="sect">Connection</div>
+      <div class="group glass">
+        <div class="row"><div class="l">Use bridges<small>Connect even where Tor is blocked</small></div><div class="toggle" onclick="tog(this)"></div></div>
+        <div class="row"><div class="l">Transport</div><div class="val">obfs4 ›</div></div>
+        <div class="row"><div class="l">Default search</div><div class="val">DuckDuckGo ›</div></div>
+      </div>
+
+      <div class="sect">Privacy</div>
+      <div class="group glass">
+        <div class="row"><div class="l">HTTPS-only mode</div><div class="toggle on" onclick="tog(this)"></div></div>
+        <div class="row"><div class="l">Block WebRTC<small>Stops your real IP leaking</small></div><div class="toggle on" onclick="tog(this)"></div></div>
+        <div class="row"><div class="l">Isolate circuit per site</div><div class="toggle on" onclick="tog(this)"></div></div>
+        <div class="row"><div class="l">Clear everything on exit</div><div class="toggle on" onclick="tog(this)"></div></div>
+      </div>
+
+      <div class="sect">Lock</div>
+      <div class="group glass">
+        <div class="row"><div class="l">Face ID to open</div><div class="toggle on" onclick="tog(this)"></div></div>
+        <div class="row"><div class="l">Hide screen in App Switcher</div><div class="toggle on" onclick="tog(this)"></div></div>
+      </div>
+
+      <div class="honesty">
+        <b>WHAT SHALLOT DOES</b>
+        Shallot hides your IP address and location and reaches .onion sites. Because iOS requires the Safari engine, it can’t fully match desktop Tor Browser’s anti-fingerprinting — raise the security level for more protection.
+      </div>
+
+      <div class="sect">About</div>
+      <div class="group glass">
+        <div class="row"><div class="l">Version</div><div class="val">0.1.0</div></div>
+        <div class="row"><div class="l">Tor</div><div class="val">0.4.8</div></div>
+      </div>
+    </section>
+
+  </div><!-- /screens -->
+
+  <div class="toast" id="toast"></div>
+
+  <!-- ============ TAB BAR ============ -->
+  <nav class="tabbar glass">
+    <button class="tab on" data-tab="browser" onclick="go('browser')" aria-label="Browse">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="10" cy="10" r="8"/><path d="M2 10h16M10 2c2.5 2 2.5 14 0 16M10 2c-2.5 2-2.5 14 0 16"/></svg>
+    </button>
+    <button class="tab" data-tab="saved" onclick="go('saved')" aria-label="Saved">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3h10v14l-5-3.5L5 17V3Z" stroke-linejoin="round"/></svg>
+    </button>
+    <button class="tab" data-tab="monitor" onclick="go('monitor')" aria-label="Monitor">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 11l3 3 4-8 3 6 2-3h4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button class="tab" data-tab="settings" onclick="go('settings')" aria-label="Settings">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="10" cy="10" r="2.6"/><path d="M10 2v2.2M10 15.8V18M18 10h-2.2M4.2 10H2M15.7 4.3l-1.6 1.6M5.9 14.1l-1.6 1.6M15.7 15.7l-1.6-1.6M5.9 5.9 4.3 4.3"/></svg>
+    </button>
+  </nav>
+</div>
+
+<script>
+const app = document.getElementById('app');
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---- navigation ---- */
+function go(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active', s.dataset.screen===name));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.tab===name));
+  const scr=document.querySelector('.screen[data-screen="'+name+'"]'); if(scr) scr.scrollTop=0;
+}
+
+/* ---- toast ---- */
+let toastT;
+function toast(html){
+  const el=document.getElementById('toast'); el.innerHTML=html; el.classList.add('show');
+  clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('show'),1900);
+}
+
+/* ---- browser loaded state ---- */
+function loadPage(){
+  const b=document.getElementById('loadbar');
+  b.style.transition='none'; b.style.opacity='1'; b.style.transform='scaleX(0)';
+  requestAnimationFrame(()=>{
+    b.style.transition='transform .45s ease';
+    b.style.transform='scaleX(.72)';
+    setTimeout(()=>{ b.style.transform='scaleX(1)';
+      setTimeout(()=>{ b.style.opacity='0'; },220);
+    },470);
+  });
+}
+function setLoaded(v){
+  app.dataset.loaded=v;
+  const f=document.getElementById('field');
+  if(v){
+    f.innerHTML='<span class="host">thedispatch3xq7k</span><span class="tld">.onion</span>';
+    const scr=document.querySelector('.screen[data-screen="browser"]'); if(scr) scr.scrollTop=0;
+    loadPage();
+  } else {
+    f.innerHTML='<span class="ph">Search or enter .onion address</span>';
+  }
+}
+function toggleLoaded(){ setLoaded(app.dataset.loaded==='1'?0:1); }
+function openFav(name){ setLoaded(1); go('browser'); toast('Opening <b>'+name+'</b> over Tor'); }
+
+/* ---- new identity / circuit ---- */
+function newIdentity(){
+  setLoaded(0); go('browser');
+  toast('<b>New identity</b> · session cleared');
+}
+const relays=[
+  ['DE','frankfurtnode','Germany'],['NL','amsix-mid','Netherlands'],['FR','parisexit9','France'],
+  ['SE','stockrelay','Sweden'],['CH','zurichguard','Switzerland'],['IS','reykjavik1','Iceland'],
+  ['RO','bucharestex','Romania'],['ES','madridnode','Spain'],['CA','torontomid','Canada'],['LU','luxrelay','Luxembourg']
+];
+function newCircuit(){
+  const chain=document.getElementById('chain');
+  const nodes=[...chain.querySelectorAll('.node')].filter(n=>!n.classList.contains('you')&&!n.classList.contains('dest'));
+  const pick=[...relays].sort(()=>Math.random()-.5).slice(0,3);
+  nodes.forEach((n,i)=>{
+    n.querySelector('[data-cc]').textContent=pick[i][0];
+    n.querySelector('[data-relay]').textContent=pick[i][1];
+    n.querySelector('[data-country]').textContent=pick[i][2];
+    n.querySelector('[data-ms]').textContent=30+Math.floor(Math.random()*120);
+  });
+  chain.animate([{opacity:.35,filter:'blur(3px)'},{opacity:1,filter:'blur(0)'}],{duration:500});
+  logEvent('↻','ok','circuit rebuilt · '+pick.map(p=>p[0]).join(' → '));
+  toast('<b>New circuit</b> · '+pick.map(p=>p[0]).join(' → '));
+}
+function logEvent(sym,cls,txt){
+  const t=document.getElementById('term'); const now=new Date();
+  const hh=String(now.getHours()).padStart(2,'0'), mm=String(now.getMinutes()).padStart(2,'0'), ss=String(now.getSeconds()).padStart(2,'0');
+  const ln=document.createElement('div'); ln.className='ln';
+  ln.innerHTML='<span class="t">'+hh+':'+mm+':'+ss+'</span> <span class="'+cls+'">'+sym+'</span> <span class="nu">'+txt+'</span>';
+  t.prepend(ln); while(t.children.length>7) t.lastChild.remove();
+}
+
+/* ---- settings ---- */
+function tog(el){ el.classList.toggle('on'); }
+const levelDesc=[
+  'Standard: all features on. Every site works normally — the least protection.',
+  'Safer: risky scripts and some fonts are disabled. A balance of usability and protection.',
+  'Safest: JavaScript is disabled on every site. Maximum protection, some sites will break.'
+];
+function setLevel(i){
+  document.querySelectorAll('#seg button').forEach((b,idx)=>b.classList.toggle('on',idx===i));
+  document.getElementById('segdesc').textContent=levelDesc[i];
+}
+
+/* ---- matrix rain (blood red) ---- */
+(function(){
+  const cv=document.getElementById('rain'), ctx=cv.getContext('2d');
+  const glyphs='ｱｲｳｴｵｶｷｸｹｺｻｼｽｾﾀﾁﾂﾃﾅﾆﾇﾊﾋﾌﾍﾎ0123456789ABCDEFxX#<>/█▓'.split('');
+  let cols, drops, fs, W, H, dpr;
+  function resize(){
+    dpr=Math.min(devicePixelRatio||1,2);
+    const r=app.getBoundingClientRect(); W=r.width; H=r.height;
+    cv.width=W*dpr; cv.height=H*dpr; cv.style.width=W+'px'; cv.style.height=H+'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    fs=15; cols=Math.ceil(W/fs);
+    drops=Array.from({length:cols},()=>Math.random()*-40);
+  }
+  resize(); addEventListener('resize',resize);
+  ctx.textBaseline='top';
+  function frame(){
+    ctx.fillStyle='rgba(10,2,6,0.10)';
+    ctx.fillRect(0,0,W,H);
+    ctx.font='600 '+fs+'px '+getComputedStyle(document.body).getPropertyValue('--mono');
+    for(let i=0;i<cols;i++){
+      const x=i*fs, y=drops[i]*fs;
+      const g=glyphs[(Math.random()*glyphs.length)|0];
+      if(y>0){
+        ctx.fillStyle='rgba(180,20,45,0.55)';
+        ctx.fillText(g,x,y-fs);
+        ctx.shadowColor='rgba(255,18,61,0.9)'; ctx.shadowBlur=8;
+        ctx.fillStyle='#ff2b45';
+        ctx.fillText(g,x,y);
+        ctx.shadowBlur=0;
+      }
+      if(y>H && Math.random()>0.975) drops[i]=Math.random()*-20;
+      drops[i]+=0.5;
+    }
+  }
+  if(reduce){ // single faint static pass
+    ctx.fillStyle='rgba(10,2,6,1)'; ctx.fillRect(0,0,W,H);
+    ctx.font='600 '+fs+'px '+getComputedStyle(document.body).getPropertyValue('--mono');
+    for(let i=0;i<cols;i++)for(let j=0;j<H/fs;j+=2){
+      if(Math.random()>.6){ctx.fillStyle='rgba(180,20,45,0.35)';ctx.fillText(glyphs[(Math.random()*glyphs.length)|0],i*fs,j*fs);}
+    }
+  } else { setInterval(frame,55); }
+})();
+
+/* ---- bandwidth sparkline ---- */
+(function(){
+  const cv=document.getElementById('spark'); if(!cv) return;
+  const ctx=cv.getContext('2d'); let data=Array.from({length:48},()=>Math.random()*.5+.2);
+  function resize(){ const w=cv.parentElement.clientWidth-28; const dpr=Math.min(devicePixelRatio||1,2);
+    cv.width=w*dpr; cv.height=46*dpr; cv.style.width=w+'px'; ctx.setTransform(dpr,0,0,dpr,0,0); }
+  resize(); addEventListener('resize',resize);
+  function draw(){
+    const w=cv.clientWidth,h=46; ctx.clearRect(0,0,w,h);
+    const step=w/(data.length-1);
+    const grd=ctx.createLinearGradient(0,0,0,h); grd.addColorStop(0,'rgba(255,18,61,.5)'); grd.addColorStop(1,'rgba(255,18,61,0)');
+    ctx.beginPath(); ctx.moveTo(0,h);
+    data.forEach((v,i)=>ctx.lineTo(i*step,h-v*h));
+    ctx.lineTo(w,h); ctx.closePath(); ctx.fillStyle=grd; ctx.fill();
+    ctx.beginPath(); data.forEach((v,i)=>{const x=i*step,y=h-v*h; i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
+    ctx.strokeStyle='#ff2b45'; ctx.lineWidth=1.5; ctx.shadowColor='rgba(255,18,61,.7)'; ctx.shadowBlur=6; ctx.stroke(); ctx.shadowBlur=0;
+  }
+  draw();
+  if(!reduce) setInterval(()=>{
+    data.push(Math.random()*.7+.15); data.shift(); draw();
+    document.getElementById('bwDn').textContent='▼ '+(140+Math.floor(Math.random()*160));
+    document.getElementById('bwUp').textContent='▲ '+(20+Math.floor(Math.random()*50));
+  },1400);
+})();
+</script>
+</body>
+</html>

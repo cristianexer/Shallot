@@ -1,0 +1,151 @@
+# SwiftLint configuration for Shallot.
+#
+# The house style here is deliberate and consistent: long explanatory doc
+# comments above every security-critical decision, full-sentence string
+# literals for the user-facing error pages, verbatim protocol fixtures in the
+# tests, and caseless `enum` namespaces of pure functions. Rules that fight
+# that style are turned off here rather than worked around in the source —
+# a `// swiftlint:disable` scattered through security code is worse than an
+# explicit decision recorded in one place.
+#
+# Run:  swiftlint lint --strict     (this is what CI runs; it must be clean)
+
+included:
+  - Packages/ShallotCore/Sources
+  - Shallot
+  - ShallotTests
+  - ShallotUITests
+
+excluded:
+  - .build
+  - DerivedData
+  - Packages/ShallotCore/.build
+  - Packages/ShallotCore/.swiftpm
+  - desing files
+
+disabled_rules:
+  # ---- column width -------------------------------------------------------
+  # swift-format owns line width (110 columns, see .swift-format). SwiftLint
+  # cannot tell an over-long *code* line from a prose string shown to the user
+  # (ErrorPage, NavigationPolicy.detail) or from a captured `GETINFO
+  # circuit-status` fixture that has to stay byte-for-byte, so enforcing it
+  # here only produces noise that trains people to ignore the linter.
+  - line_length
+
+  # ---- deliberate house style --------------------------------------------
+  # `AppContainer` falls back to an in-memory store with a documented `try!`:
+  # if building a container from a schema that has already been validated
+  # fails, there is no app left to run and crashing is the honest outcome.
+  - force_try
+
+  # Trailing commas in multi-line literals are the Xcode default and are used
+  # consistently throughout.
+  - trailing_comma
+
+  # SwiftUI bodies routinely take a trailing closure alongside another; the
+  # rule is aimed at imperative call sites and misfires on view builders.
+  - multiple_closures_with_trailing_closure
+
+  # `ForEach(Array(path.enumerated()), id: \.element.id) { index, relay in`
+  # names both elements for readability even when only one is used; renaming
+  # to `_` makes the tuple harder to read, not easier.
+  - unused_closure_parameter
+
+  # Cosmetic whitespace rules that flag one incidental line each and would
+  # otherwise require touching files for no behavioural reason.
+  - leading_whitespace
+  - vertical_whitespace
+
+  # The Xcode XCUITest template generates `override class var runsForEachTargetApplicationUIConfiguration`.
+  - static_over_final_class
+
+  # TODOs are tracked in the issue tracker, not gated by the linter.
+  - todo
+
+opt_in_rules:
+  - closure_spacing
+  - collection_alignment
+  - contains_over_filter_count
+  - contains_over_first_not_nil
+  - explicit_init
+  - fatal_error_message
+  - first_where
+  - flatmap_over_map_reduce
+  - joined_default_parameter
+  - last_where
+  - literal_expression_end_indentation
+  - modifier_order
+  - operator_usage_whitespace
+  - overridden_super_call
+  - prefer_self_type_over_type_of_self
+  - redundant_nil_coalescing
+  - sorted_first_last
+  - toggle_bool
+  - unavailable_function
+  - unneeded_parentheses_in_closure_argument
+  - yoda_condition
+
+analyzer_rules:
+  # Only runs under `swiftlint analyze`; kept here so it is available when
+  # someone wants a compile-backed pass.
+  - unused_import
+
+# ---------------------------------------------------------------------------
+# Rule configuration
+# ---------------------------------------------------------------------------
+
+file_length:
+  # Implementation files sit well under this. The ceiling is set by the test
+  # suites, where one file per subject — every view model, every leak probe —
+  # is easier to navigate than the same tests split across several.
+  warning: 1000
+  error: 1600
+
+type_body_length:
+  warning: 400
+  error: 600
+
+function_body_length:
+  # `LeakMitigations.source(for:)` assembles the document-start user script
+  # from four labelled blocks of JavaScript. Splitting it would scatter the
+  # single most security-critical string in the app across several functions.
+  warning: 130
+  error: 200
+
+function_parameter_count:
+  warning: 8
+  error: 10
+
+cyclomatic_complexity:
+  warning: 15
+  error: 25
+
+large_tuple:
+  warning: 3
+  error: 4
+
+nesting:
+  type_level: 3
+
+identifier_name:
+  min_length:
+    warning: 2
+    error: 1
+  excluded:
+    - id
+    - at
+    - on
+    - to
+    - up
+    - x
+    - y
+    - a   # RainView.hash(_:_:) — a deterministic two-argument mixing function
+    - b
+
+type_name:
+  min_length: 3
+  max_length:
+    warning: 50
+    error: 60
+
+reporter: "xcode"

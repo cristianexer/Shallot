@@ -1,0 +1,292 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.app/Contents/Developer
+  PROJECT: Shallot.xcodeproj
+  SCHEME: Shallot
+  # The simulator is picked at run time rather than pinned by name: which
+  # iPhone models exist depends on the runtime the runner's Xcode ships, and a
+  # hard-coded name breaks silently when that moves. Any simulator running iOS
+  # 18 or later will do — iOS 18 is the deployment floor, forced by swift-tor
+  # declaring .iOS(.v18).
+  # Signing is off for simulator builds; CI has no certificates and does not
+  # need any, because the in-app proxy route needs no entitlement.
+  UNSIGNED: >-
+    CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build + the hermetic test suites. Runs on every push and pull request.
+  #
+  # ShallotTests and ShallotUITests are deliberately hermetic: AppContainer
+  # detects the test host and substitutes MockTorService and an in-memory store,
+  # so nothing here needs the Tor network to be reachable from a runner.
+  # ---------------------------------------------------------------------------
+  build-and-test:
+    name: Build and test
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26 and install xcbeautify
+        run: |
+          sudo xcode-select -s "$DEVELOPER_DIR"
+          brew install xcbeautify
+          xcodebuild -version
+          swift --version
+
+      # The embedded Tor C library (swift-tor -> swift-openssl) is slow to
+      # build from source, so both the resolved checkouts and the SwiftPM
+      # build products are cached. The key is the resolved-versions file, so
+      # the cache invalidates exactly when a dependency actually moves.
+      - name: Cache SwiftPM dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+            .build
+          key: >-
+            ${{ runner.os }}-spm-${{ hashFiles(
+              'Shallot.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved',
+              'Packages/ShallotCore/Package.swift'
+            ) }}
+          restore-keys: ${{ runner.os }}-spm-
+
+      - name: Resolve packages
+        run: |
+          xcodebuild -project "$PROJECT" -scheme "$SCHEME" \
+            -resolvePackageDependencies
+
+      # -showdestinations only lists simulators the deployment target can
+      # actually run on, so this cannot pick something older than iOS 18.
+      - name: Pick a simulator
+        id: sim
+        run: |
+          udid=$(xcodebuild -project "$PROJECT" -scheme "$SCHEME" -showdestinations 2>/dev/null \
+            | grep 'platform:iOS Simulator' \
+            | grep 'name:iPhone' \
+            | grep -v 'placeholder' \
+            | tail -1 \
+            | sed -E 's/.*id:([0-9A-Fa-f-]+).*/\1/')
+          if [ -z "$udid" ]; then
+            echo "::error::No iOS simulator available on this runner."
+            exit 1
+          fi
+          echo "destination=platform=iOS Simulator,id=$udid" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project "$PROJECT" -scheme "$SCHEME" \
+            -destination "${{ steps.sim.outputs.destination }}" \
+            -derivedDataPath DerivedData \
+            $UNSIGNED | xcbeautify --renderer github-actions
+
+      # Anything named *Live* or *Integration* needs the real Tor network and
+      # belongs to the manual job at the bottom of this file, so it is skipped
+      # here. The rest is hermetic by construction: AppContainer detects the
+      # test host and substitutes MockTorService and an in-memory store.
+      - name: Find suites that need the live network
+        id: live
+        run: |
+          suites=$(grep -rhoE '^ *(public |internal |final )*(class|struct) +[A-Za-z0-9_]*(Live|Integration)[A-Za-z0-9_]*' \
+            --include='*.swift' ShallotTests ShallotUITests 2>/dev/null \
+            | awk '{ print $NF }' | sort -u)
+          flags=""
+          for suite in $suites; do
+            if grep -rql "$suite" --include='*.swift' ShallotUITests 2>/dev/null; then
+              flags="$flags -skip-testing:ShallotUITests/$suite"
+            else
+              flags="$flags -skip-testing:ShallotTests/$suite"
+            fi
+          done
+          echo "flags=$flags" >> "$GITHUB_OUTPUT"
+
+      - name: Unit tests (ShallotTests)
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project "$PROJECT" -scheme "$SCHEME" \
+            -destination "${{ steps.sim.outputs.destination }}" \
+            -derivedDataPath DerivedData \
+            -only-testing:ShallotTests ${{ steps.live.outputs.flags }} \
+            -resultBundlePath TestResults-Unit.xcresult \
+            $UNSIGNED | xcbeautify --renderer github-actions
+
+      - name: UI tests (ShallotUITests)
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project "$PROJECT" -scheme "$SCHEME" \
+            -destination "${{ steps.sim.outputs.destination }}" \
+            -derivedDataPath DerivedData \
+            -only-testing:ShallotUITests ${{ steps.live.outputs.flags }} \
+            -resultBundlePath TestResults-UI.xcresult \
+            $UNSIGNED | xcbeautify --renderer github-actions
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults-*.xcresult
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # Style gates.
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      # --strict promotes every warning to an error, so this step fails the
+      # build on any violation at all. .swiftlint.yml is configured to be clean
+      # on this codebase; a new violation is therefore a real one.
+      - name: SwiftLint
+        run: swiftlint lint --strict --reporter github-actions-logging
+
+      # swift-format ships inside the Xcode toolchain. It runs in lint mode as
+      # an advisory check: its pretty-printer disagrees with some of this
+      # codebase's hand-wrapped call sites (multi-line `guard let` in
+      # particular) and with prose string literals that are shown to the user,
+      # and reformatting security-critical files to satisfy a printer is not a
+      # trade we want CI to force. Genuine errors — a file it cannot parse, or
+      # a broken .swift-format — still fail this step.
+      - name: swift-format (lint)
+        run: |
+          sudo xcode-select -s "$DEVELOPER_DIR"
+          xcrun swift-format lint --recursive \
+            Packages/ShallotCore/Sources Shallot ShallotTests ShallotUITests
+
+  # ---------------------------------------------------------------------------
+  # Integration, leak and performance suites.
+  #
+  # THESE ARE NOT RUN ON EVERY PULL REQUEST, ON PURPOSE.
+  #
+  # They need a real network: they bootstrap a real Tor, fetch
+  # check.torproject.org/api/ip to assert IsTor == true and that the exit IP is
+  # not the device's, load a real .onion, prove per-tab circuit isolation gives
+  # two different exit IPs, and drive the WebKit proxy-bypass proof-of-concepts
+  # to confirm the DNS-prefetch, WebAuthn, WebTransport and WebRTC mitigations
+  # hold. On a shared GitHub runner they are slow, flaky and — because Tor exit
+  # traffic from CI ranges is frequently blocked or captcha'd — not a reliable
+  # signal. They belong on a device lane or a nightly job with real hardware.
+  #
+  # Anything whose test or suite name contains "Live" or "Integration" is
+  # selected here and excluded above. Trigger from the Actions tab, or on a
+  # schedule once a device lane exists.
+  # ---------------------------------------------------------------------------
+  live-integration:
+    name: Live integration, leak and performance suites (manual)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26 and install xcbeautify
+        run: |
+          sudo xcode-select -s "$DEVELOPER_DIR"
+          brew install xcbeautify
+
+      - name: Cache SwiftPM dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+            .build
+          key: >-
+            ${{ runner.os }}-spm-${{ hashFiles(
+              'Shallot.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved',
+              'Packages/ShallotCore/Package.swift'
+            ) }}
+          restore-keys: ${{ runner.os }}-spm-
+
+      - name: Resolve packages
+        run: xcodebuild -project "$PROJECT" -scheme "$SCHEME" -resolvePackageDependencies
+
+      # -showdestinations only lists simulators the deployment target can
+      # actually run on, so this cannot pick something older than iOS 18.
+      - name: Pick a simulator
+        id: sim
+        run: |
+          udid=$(xcodebuild -project "$PROJECT" -scheme "$SCHEME" -showdestinations 2>/dev/null \
+            | grep 'platform:iOS Simulator' \
+            | grep 'name:iPhone' \
+            | grep -v 'placeholder' \
+            | tail -1 \
+            | sed -E 's/.*id:([0-9A-Fa-f-]+).*/\1/')
+          if [ -z "$udid" ]; then
+            echo "::error::No iOS simulator available on this runner."
+            exit 1
+          fi
+          echo "destination=platform=iOS Simulator,id=$udid" >> "$GITHUB_OUTPUT"
+
+      # The convention: any test type whose name contains "Live" or
+      # "Integration" needs the real network. They are discovered from the
+      # sources rather than listed here, so adding one is a matter of naming it
+      # correctly — it is then picked up by this job and, by the same rule,
+      # skipped by the pull-request job above.
+      - name: Discover live suites
+        id: discover
+        run: |
+          suites=$(grep -rhoE '^ *(public |internal |final )*(class|struct) +[A-Za-z0-9_]*(Live|Integration)[A-Za-z0-9_]*' \
+            --include='*.swift' ShallotTests ShallotUITests 2>/dev/null \
+            | awk '{ print $NF }' | sort -u)
+          flags=""
+          for suite in $suites; do
+            if grep -rql "$suite" --include='*.swift' ShallotUITests 2>/dev/null; then
+              flags="$flags -only-testing:ShallotUITests/$suite"
+            else
+              flags="$flags -only-testing:ShallotTests/$suite"
+            fi
+          done
+          echo "flags=$flags" >> "$GITHUB_OUTPUT"
+          if [ -z "$flags" ]; then
+            echo "::notice::No Live/Integration suites in the tree yet — nothing to run."
+          else
+            echo "Selected:$flags"
+          fi
+
+      - name: Live suites
+        if: steps.discover.outputs.flags != ''
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project "$PROJECT" -scheme "$SCHEME" \
+            -destination "${{ steps.sim.outputs.destination }}" \
+            -derivedDataPath DerivedData \
+            ${{ steps.discover.outputs.flags }} \
+            -resultBundlePath TestResults-Live.xcresult \
+            $UNSIGNED | xcbeautify --renderer github-actions
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-test-results
+          path: TestResults-Live.xcresult
+          if-no-files-found: ignore
