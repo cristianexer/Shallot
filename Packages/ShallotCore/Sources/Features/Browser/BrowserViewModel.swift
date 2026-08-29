@@ -30,6 +30,9 @@ public final class BrowserViewModel {
     /// Set when a load is refused because Tor is not up yet.
     public private(set) var pendingURL: URL?
 
+    /// The settings the currently-built sessions were made with.
+    @ObservationIgnored private var appliedEngineSettings: AppSettings
+
     public init(
         session: any BrowsingSessioning,
         tor: any TorServicing,
@@ -44,6 +47,7 @@ public final class BrowserViewModel {
         self.settingsStore = settingsStore
         self.monitor = monitor
         self.favourites = favourites
+        self.appliedEngineSettings = settingsStore.settings
     }
 
     // MARK: - Derived state
@@ -220,12 +224,28 @@ public final class BrowserViewModel {
     public func setSecurityLevel(_ level: SecurityLevel) {
         guard level != settings.securityLevel else { return }
         settingsStore.update { $0.securityLevel = level }
+        Task { await applySettingsChange() }
+    }
+
+    /// Pushes a settings change into the engine, rebuilding open tabs when the
+    /// change is one a live web view cannot be told about.
+    ///
+    /// Without this, turning off a leak mitigation or changing the security
+    /// level would appear to work and do nothing at all until the next new tab:
+    /// the user script and the rule lists are fixed when a web view is built.
+    public func applySettingsChange() async {
         let updated = settingsStore.settings
-        Task {
-            engine.settings = updated
-            await engine.prepareRuleLists()
-            reload()
-        }
+        let needsRebuild = updated.requiresEngineRebuild(comparedTo: appliedEngineSettings)
+        appliedEngineSettings = updated
+        engine.settings = updated
+        await engine.prepareRuleLists()
+        guard needsRebuild else { return }
+        // Only the teardown happens here. Building a web view is expensive, and
+        // doing it while someone is still flicking switches on the Settings
+        // screen spends that cost on a tab they are not looking at — and hitches
+        // the switch they just tapped. `prepareSession(for:)` rebuilds the front
+        // tab when the browser is next shown, and restores what it was on.
+        await engine.destroyAllSessions()
     }
 
     /// Raises the security level for this tab only, for a site that JavaScript
@@ -257,7 +277,14 @@ public final class BrowserViewModel {
         let key = settings.isolateCircuitPerTab ? tab.isolationKey : IsolationKey.utility
         guard let port = try? await tor.socksPort(forIsolationKey: key) else { return }
         await engine.prepareRuleLists()
-        _ = engine.session(for: tab, socksPort: port)
+        guard let tabSession = engine.session(for: tab, socksPort: port) else { return }
+
+        // A session built for a tab that already has an address is a session
+        // that was torn down — by a settings change, or by shedding memory —
+        // so put the page back rather than leaving a blank canvas.
+        if let url = tab.url, tabSession.webView.url == nil {
+            tabSession.load(url)
+        }
     }
 
     private func load(_ url: URL, in tab: BrowserTab) async {

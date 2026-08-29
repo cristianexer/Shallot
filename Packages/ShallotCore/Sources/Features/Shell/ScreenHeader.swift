@@ -22,6 +22,8 @@ public struct ScreenHeader: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 8) {
+                SidebarToggleButton()
+                    .padding(.trailing, -6)
                 if isLive {
                     PulseDot(size: 6)
                 }

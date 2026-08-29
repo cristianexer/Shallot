@@ -99,9 +99,10 @@ public final class AppModel {
             appVersion: appVersion,
             torVersion: { [weak versionBox] in versionBox?.value ?? "—" },
             transportAvailability: transportAvailability,
-            onSettingsChanged: { [engine] updated in
-                engine.settings = updated
-                await engine.prepareRuleLists()
+            onSettingsChanged: { [browser] _ in
+                // The browser owns this: it is the only place that knows which
+                // web views exist and what they were showing.
+                await browser.applySettingsChange()
             }
         )
 
@@ -131,6 +132,12 @@ public final class AppModel {
 
         do {
             try await tor.start()
+            // Tor was started with whatever bridge configuration was stored, so
+            // that configuration is now the applied one. Without this the
+            // "relaunch needed" notice would survive the relaunch that
+            // satisfied it and never clear.
+            _ = try? await tor.setBridges(settingsStore.settings.bridges)
+            settingsStore.markBridgesApplied()
             if let version = await tor.version() {
                 versionBox.value = version
                 torVersion = version

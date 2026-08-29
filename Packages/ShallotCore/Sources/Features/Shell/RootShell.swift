@@ -11,6 +11,11 @@ public struct RootShell: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.scenePhase) private var scenePhase
 
+    /// Owned here rather than left to `NavigationSplitView`, so the sidebar can
+    /// be revealed from our own chrome instead of from a navigation bar sitting
+    /// above it.
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+
     public init(model: AppModel) {
         self.model = model
     }
@@ -69,6 +74,19 @@ public struct RootShell: View {
         .animation(.easeOut(duration: 0.22), value: isTabBarVisible)
     }
 
+    /// The sidebar control handed to whichever screen is on show.
+    ///
+    /// Always present on this shell, because hiding the split view's own
+    /// navigation bar removed the only other way to collapse the sidebar and
+    /// give a page the full width.
+    private var sidebarControl: SidebarControl {
+        SidebarControl(isVisible: columnVisibility == .all) {
+            withAnimation(.easeInOut(duration: 0.22)) {
+                columnVisibility = columnVisibility == .all ? .detailOnly : .all
+            }
+        }
+    }
+
     /// The tab bar only ever hides on the browser, and only while a page is
     /// being read — the list screens keep it, because there is nothing there
     /// worth surrendering the navigation for.
@@ -79,7 +97,7 @@ public struct RootShell: View {
     // MARK: - Regular (iPad, iPhone landscape)
 
     private var regularShell: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             sidebar
         } detail: {
             // The backdrop belongs *inside* the detail pane on this shell.
@@ -90,8 +108,14 @@ public struct RootShell: View {
                 ShallotBackdrop(isPaused: model.isObscured)
                 screen
             }
+            // Hiding the detail's navigation bar is what collapses the iPad
+            // back to a single row of chrome; the toggle it would have held is
+            // published below and drawn inline by whichever screen is on show.
+            .toolbar(.hidden, for: .navigationBar)
+            .toolbarBackground(.hidden, for: .navigationBar)
         }
         .navigationSplitViewStyle(.balanced)
+        .environment(\.sidebarControl, sidebarControl)
     }
 
     private var sidebar: some View {
@@ -103,6 +127,14 @@ public struct RootShell: View {
                 set: { if let new = $0 { model.section = new } }
             )
         ) {
+            Text("SHALLOT")
+                .font(Typography.data)
+                .tracking(4)
+                .foregroundStyle(Palette.arterialSoft)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .accessibilityAddTraits(.isHeader)
+
             Section {
                 ForEach(AppSection.allCases) { section in
                     Label(section.title, systemImage: section.symbol)
@@ -144,7 +176,11 @@ public struct RootShell: View {
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
         .background(Palette.void.opacity(0.4))
-        .navigationTitle("Shallot")
+        // The sidebar's own navigation bar is hidden too. It held a second
+        // copy of the sidebar toggle — two controls doing one job, which is
+        // the clutter this shell was cleaned up to remove — and its title is
+        // better said once, inside the list.
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     // MARK: - Screens

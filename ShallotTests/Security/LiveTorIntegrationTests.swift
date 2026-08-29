@@ -4,6 +4,7 @@ import WebKit
 
 @testable import BrowserEngine
 @testable import Domain
+@testable import Monitoring
 @testable import TorKit
 
 /// Whether the live suite should run.
@@ -250,6 +251,52 @@ struct LiveTorIntegrationTests {
         let body = try await harness.session.webView
             .evaluateJavaScript("document.body.innerText") as? String
         #expect((body?.count ?? 0) > 0, "the onion service returned an empty page")
+    }
+
+    @Test("A second, independent onion service is reachable")
+    @MainActor
+    func reachesAnotherOnionService() async throws {
+        // A second address, because one onion being up proves less than two:
+        // a single service going offline would otherwise look like a broken
+        // browser.
+        let harness = try await Self.makeLiveSession()
+        defer { Task { await harness.engine.destroyAllSessions() } }
+
+        let onion = URL(string: "http://ofinde3b67voi7xiq3qflof2mwriwngicd7glwvf3bclgdgcjfozlzqd.onion/")!
+        harness.session.load(onion)
+        let loaded = await Self.waitForLoad(harness.session, tab: harness.tab, timeout: .seconds(120))
+        #expect(loaded, "the onion service never finished loading")
+        #expect(harness.session.webView.url?.host()?.hasSuffix(".onion") == true)
+    }
+
+    @Test("The Monitor sees real circuits, streams and bandwidth")
+    @MainActor
+    func monitorIsWiredToRealTor() async throws {
+        // The Monitor is the screen that claims everything is measured on this
+        // device. This is that claim, against a real Tor rather than a mock.
+        let tor = try await Self.tor()
+        let monitor = MonitorService(tor: tor)
+        monitor.start()
+
+        let harness = try await Self.makeLiveSession()
+        defer { Task { await harness.engine.destroyAllSessions() } }
+        harness.session.load(URL(string: "https://check.torproject.org/api/ip")!)
+        _ = await Self.waitForLoad(harness.session, tab: harness.tab, timeout: .seconds(90))
+
+        var sawCircuit = false
+        var sawBandwidth = false
+        let deadline = ContinuousClock.now.advanced(by: .seconds(30))
+        while ContinuousClock.now < deadline, !(sawCircuit && sawBandwidth) {
+            await monitor.refreshCircuits()
+            sawCircuit = sawCircuit || monitor.primaryCircuit?.path.isEmpty == false
+            sawBandwidth = sawBandwidth || !monitor.bandwidthHistory.isEmpty
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+
+        #expect(sawCircuit, "the Monitor never saw a built circuit")
+        #expect(sawBandwidth, "the Monitor never received a bandwidth sample")
+        #expect(monitor.bootstrapProgress == 100)
+        #expect(monitor.streamCount >= 0)
     }
 
     @Test("New identity is accepted and traffic still flows afterwards")

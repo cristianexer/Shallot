@@ -35,6 +35,8 @@ public struct OmniBar: View {
     public var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {
+                SidebarToggleButton()
+
                 if model.canGoBack {
                     control("chevron.left", label: "Back") { model.goBack() }
                 }

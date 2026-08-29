@@ -76,4 +76,36 @@ final class NavigationUITests: XCTestCase {
             "The scripted Tor should be reported as connected, with a circuit."
         )
     }
+
+    // MARK: - The split-view shell
+
+    @MainActor
+    func testTheSidebarCanBeHiddenAndBroughtBackFromTheAppsOwnChrome() throws {
+        try XCTSkipUnless(usesSplitViewShell, "The sidebar only exists on the regular-width shell.")
+        let app = launchShallot()
+
+        // The split view's own toggle lives in a navigation bar above the
+        // omnibar, which is a second row of chrome for one button. The app
+        // hides that bar and draws the control inline instead, so the control
+        // has to work in both directions or the sidebar becomes permanent.
+        let hide = app.buttons["Hide Sidebar"]
+        XCTAssertTrue(hide.waitForExistence(timeout: Timeout.element), "The sidebar control should be inline.")
+        hide.tap()
+
+        let show = app.buttons["Show Sidebar"]
+        XCTAssertTrue(
+            show.waitForExistence(timeout: Timeout.transition),
+            "Hiding the sidebar should leave a control to bring it back."
+        )
+        XCTAssertFalse(
+            app.buttons["New tab"].isHittable,
+            "The sidebar should be off screen once it is hidden."
+        )
+
+        show.tap()
+        XCTAssertTrue(
+            app.buttons["Hide Sidebar"].waitForExistence(timeout: Timeout.transition),
+            "The sidebar should come back."
+        )
+    }
 }

@@ -120,13 +120,15 @@ extension XCUIApplication {
         return sectionControl(.browse).waitForExistence(timeout: timeout)
     }
 
-    /// Taps the split view's sidebar toggle, if one is on screen.
+    /// Taps the sidebar control, but only when it would *reveal* the sidebar.
+    ///
+    /// The control is inline in the app's own chrome and toggles both ways, so
+    /// matching on "sidebar" alone would cheerfully hide a sidebar that was
+    /// already there.
     @discardableResult
     @MainActor
     func revealSidebarIfNeeded() -> Bool {
-        let toggle = buttons
-            .matching(NSPredicate(format: "label CONTAINS[c] 'sidebar'"))
-            .firstMatch
+        let toggle = buttons["Show Sidebar"]
         guard toggle.waitForExistence(timeout: Timeout.brief), toggle.isHittable else { return false }
         toggle.tap()
         return true

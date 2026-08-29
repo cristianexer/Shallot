@@ -157,6 +157,25 @@ public struct AppSettings: Sendable, Hashable, Codable {
         if enabled { siteExceptions.append(exception) }
     }
 
+    /// Whether moving from `other` to `self` requires rebuilding open tabs.
+    ///
+    /// Some settings are read afresh on every navigation — the search engine,
+    /// HTTPS-only's policy decisions — and take effect on the next tap. Others
+    /// are baked into a web view when it is built: the leak-mitigation user
+    /// script, the compiled content rule lists, and which SOCKS port the tab is
+    /// proxied through. Those cannot be changed on a live web view, so the
+    /// session has to be built again or the toggle is a lie.
+    public func requiresEngineRebuild(comparedTo other: AppSettings) -> Bool {
+        securityLevel != other.securityLevel
+            || httpsOnly != other.httpsOnly
+            || blockWebRTC != other.blockWebRTC
+            || blockWebAuthn != other.blockWebAuthn
+            || blockWebTransport != other.blockWebTransport
+            || blockDNSPrefetch != other.blockDNSPrefetch
+            || isolateCircuitPerTab != other.isolateCircuitPerTab
+            || siteExceptions != other.siteExceptions
+    }
+
     /// The effective security level for a host, honouring any per-site opt-in.
     public func effectiveSecurityLevel(for host: String?, tabOverride: SecurityLevel?) -> SecurityLevel {
         if let tabOverride { return tabOverride }

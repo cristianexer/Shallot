@@ -195,3 +195,64 @@ struct ReorderTests {
         #expect(items == [1, 3, 4, 0, 2])
     }
 }
+
+@Suite("Which settings need open tabs rebuilt")
+struct EngineRebuildTests {
+    @Test("A leak mitigation cannot be changed on a live web view")
+    func leakTogglesNeedARebuild() {
+        // The mitigation is a document-start user script fixed when the web
+        // view is built, so a toggle that did not rebuild would be a lie.
+        for change in [
+            { (settings: inout AppSettings) in settings.blockWebRTC = false },
+            { settings in settings.blockWebAuthn = false },
+            { settings in settings.blockWebTransport = false },
+            { settings in settings.blockDNSPrefetch = false },
+        ] {
+            var updated = AppSettings.default
+            change(&updated)
+            #expect(updated.requiresEngineRebuild(comparedTo: .default))
+        }
+    }
+
+    @Test("The security level and HTTPS-only need a rebuild, because the rule lists are compiled in")
+    func ruleListChangesNeedARebuild() {
+        var level = AppSettings.default
+        level.securityLevel = .safest
+        #expect(level.requiresEngineRebuild(comparedTo: .default))
+
+        var https = AppSettings.default
+        https.httpsOnly = false
+        #expect(https.requiresEngineRebuild(comparedTo: .default))
+    }
+
+    @Test("Circuit isolation needs a rebuild, because the SOCKS port is fixed per web view")
+    func isolationNeedsARebuild() {
+        var updated = AppSettings.default
+        updated.isolateCircuitPerTab = false
+        #expect(updated.requiresEngineRebuild(comparedTo: .default))
+    }
+
+    @Test("A per-site exception needs a rebuild for the site it was granted on")
+    func exceptionsNeedARebuild() {
+        var updated = AppSettings.default
+        updated.setException(.webRTC, on: "meet.example", enabled: true)
+        #expect(updated.requiresEngineRebuild(comparedTo: .default))
+    }
+
+    @Test("Settings a live web view never sees do not disturb it")
+    func unrelatedSettingsDoNotRebuild() {
+        // Reloading someone's page because they turned on Face ID would be a
+        // gratuitous interruption.
+        for change in [
+            { (settings: inout AppSettings) in settings.requireBiometricUnlock = true },
+            { settings in settings.hideInAppSwitcher = false },
+            { settings in settings.clearOnExit = false },
+            { settings in settings.searchEngine = .duckDuckGo },
+            { settings in settings.bridges.isEnabled = true },
+        ] {
+            var updated = AppSettings.default
+            change(&updated)
+            #expect(!updated.requiresEngineRebuild(comparedTo: .default))
+        }
+    }
+}
