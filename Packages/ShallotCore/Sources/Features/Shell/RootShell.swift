@@ -151,7 +151,8 @@ public struct RootShell: View {
                     model.section = .favourites
                     model.favourites.beginAdding()
                 },
-                onRetryConnection: { await model.retryConnection() }
+                onRetryConnection: { await model.retryConnection() },
+                canRetryConnection: model.canRetryConnection
             )
         case .favourites:
             FavouritesView(model: model.favourites)

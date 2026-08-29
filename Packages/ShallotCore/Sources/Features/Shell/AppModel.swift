@@ -26,6 +26,13 @@ public final class AppModel {
     /// Reported by Tor once it is running; blank until then.
     public var torVersion: String = "—"
 
+    /// False once a start attempt has failed and only a relaunch can help.
+    ///
+    /// The embedded Tor cannot be launched twice in one process, so the
+    /// connection screen must stop offering a retry rather than show a button
+    /// that is guaranteed not to work.
+    public private(set) var canRetryConnection = true
+
     /// True while the app is not frontmost. Freezes the rain canvas and, when
     /// the setting is on, hides the content from the app switcher.
     public var isObscured = false
@@ -129,19 +136,27 @@ public final class AppModel {
                 torVersion = version
             }
         } catch {
-            torState = .failed(reason: String(describing: error))
+            torState = .failed(reason: describe(error))
+            canRetryConnection = await tor.canRetryStart
             feed.record(SecurityEvent(kind: .failure, message: "tor failed to start"))
         }
     }
 
     /// Retries a failed bootstrap.
     public func retryConnection() async {
+        guard canRetryConnection else { return }
         torState = .starting(progress: 0)
         do {
             try await tor.start()
         } catch {
-            torState = .failed(reason: String(describing: error))
+            torState = .failed(reason: describe(error))
+            canRetryConnection = await tor.canRetryStart
         }
+    }
+
+    /// A failure reason worth showing someone, rather than a Swift dump.
+    private func describe(_ error: any Error) -> String {
+        (error as? any CustomStringConvertible)?.description ?? error.localizedDescription
     }
 
     private func observeTorState() {

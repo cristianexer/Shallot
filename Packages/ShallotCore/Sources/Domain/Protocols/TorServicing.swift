@@ -53,6 +53,13 @@ public protocol TorServicing: Sendable {
     /// Log lines and lifecycle notices worth showing in the Monitor.
     func securityEvents() async -> AsyncStream<SecurityEvent>
 
+    /// Whether a failed start can be retried at all.
+    ///
+    /// The embedded Tor cannot be launched twice in one process, so once an
+    /// attempt has been made and failed, the only remedy is a relaunch — and
+    /// the UI must say that rather than offering a button that cannot work.
+    var canRetryStart: Bool { get async }
+
     /// The version of the Tor library actually running, once it is up.
     ///
     /// Read from Tor itself rather than hard-coded, so the About screen cannot

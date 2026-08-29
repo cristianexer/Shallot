@@ -80,6 +80,9 @@ public actor TorService: TorServicing {
         case bootstrapTimedOut
         case controlUnavailable
         case startFailed(String)
+        /// Tor was launched once already and did not come up. It cannot be
+        /// launched again in this process.
+        case requiresRelaunch
 
         public var description: String {
             switch self {
@@ -87,6 +90,8 @@ public actor TorService: TorServicing {
             case .bootstrapTimedOut: "Tor could not finish connecting in time."
             case .controlUnavailable: "Tor's control channel is not available."
             case .startFailed(let reason): "Tor failed to start: \(reason)"
+            case .requiresRelaunch:
+                "Tor cannot be started again in this session. Quit Shallot and open it again."
             }
         }
     }
@@ -101,6 +106,12 @@ public actor TorService: TorServicing {
 
     private var currentState: TorRuntimeState = .off
     private var startTask: Task<Void, Error>?
+    /// Whether `tor_run_main()` has already been handed a thread in this process.
+    ///
+    /// The Tor C library keeps process-global state, so launching it a second
+    /// time is undefined behaviour — not a slower start, and not an error it
+    /// reports. Once this is set, a retry has to be refused.
+    private var hasLaunchedTorProcess = false
     private var eventTask: Task<Void, Never>?
     private var samplingTask: Task<Void, Never>?
 
@@ -127,6 +138,9 @@ public actor TorService: TorServicing {
 
     public var state: TorRuntimeState { currentState }
 
+    /// Whether a failed start can be retried, or whether only a relaunch will do.
+    public var canRetryStart: Bool { !hasLaunchedTorProcess }
+
     public func stateUpdates() -> AsyncStream<TorRuntimeState> {
         states.stream(priming: currentState)
     }
@@ -148,6 +162,10 @@ public actor TorService: TorServicing {
         // second Tor, which the C library would not survive.
         if let startTask { return try await startTask.value }
         if currentState.canCarryTraffic { return }
+        // A failed attempt cannot be retried in-process. Saying so is the only
+        // honest answer; trying anyway would appear to work in the simulator
+        // and wedge on a device.
+        if hasLaunchedTorProcess { throw ServiceError.requiresRelaunch }
 
         let task = Task<Void, Error> { [weak self] in
             guard let self else { return }
@@ -263,6 +281,7 @@ public actor TorService: TorServicing {
         let client = TorClient(configuration: torConfiguration)
         self.client = client
         startConsumingEvents(of: client)
+        hasLaunchedTorProcess = true
 
         do {
             try await client.start()

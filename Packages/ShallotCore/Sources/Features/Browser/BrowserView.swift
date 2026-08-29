@@ -12,6 +12,7 @@ public struct BrowserView: View {
     var onNewIdentity: () async -> Void
     var onAddFavourite: () -> Void
     var onRetryConnection: () async -> Void
+    var canRetryConnection: Bool
 
     @State private var isShowingTabs = false
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -23,7 +24,8 @@ public struct BrowserView: View {
         favourites: [Favourite],
         onNewIdentity: @escaping () async -> Void,
         onAddFavourite: @escaping () -> Void,
-        onRetryConnection: @escaping () async -> Void
+        onRetryConnection: @escaping () async -> Void,
+        canRetryConnection: Bool = true
     ) {
         self.model = model
         self.torState = torState
@@ -32,6 +34,7 @@ public struct BrowserView: View {
         self.onNewIdentity = onNewIdentity
         self.onAddFavourite = onAddFavourite
         self.onRetryConnection = onRetryConnection
+        self.canRetryConnection = canRetryConnection
     }
 
     public var body: some View {
@@ -117,7 +120,9 @@ public struct BrowserView: View {
     private var content: some View {
         switch torState {
         case .failed(let reason):
-            ConnectionFailedView(reason: reason) { await onRetryConnection() }
+            ConnectionFailedView(reason: reason, canRetry: canRetryConnection) {
+                await onRetryConnection()
+            }
         case .off, .starting:
             BootstrapView(state: torState)
         case .running, .stopping:
@@ -213,6 +218,9 @@ struct BootstrapView: View {
 /// Shown when bootstrap failed outright.
 struct ConnectionFailedView: View {
     var reason: String
+    /// The embedded Tor cannot be launched twice in one process, so a second
+    /// attempt is offered only when one can actually be made.
+    var canRetry: Bool
     var retry: () async -> Void
 
     @State private var isRetrying = false
@@ -238,15 +246,23 @@ struct ConnectionFailedView: View {
                 .lineLimit(3)
                 .padding(.horizontal, Metrics.gutter)
 
-            TerminalButton(isRetrying ? "RETRYING…" : "TRY AGAIN", emphasis: .solid) {
-                guard !isRetrying else { return }
-                isRetrying = true
-                Task {
-                    await retry()
-                    isRetrying = false
+            if canRetry {
+                TerminalButton(isRetrying ? "RETRYING…" : "TRY AGAIN", emphasis: .solid) {
+                    guard !isRetrying else { return }
+                    isRetrying = true
+                    Task {
+                        await retry()
+                        isRetrying = false
+                    }
                 }
+                .frame(maxWidth: 240)
+            } else {
+                Text("Quit Shallot and open it again to try once more.")
+                    .font(Typography.detail)
+                    .foregroundStyle(Palette.arterialSoft)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 4)
             }
-            .frame(maxWidth: 240)
             Spacer()
             Spacer()
         }

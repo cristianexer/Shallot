@@ -86,6 +86,9 @@ public actor MockTorService: TorServicing {
         eventFeed.stream()
     }
 
+    /// The mock can always be retried; nothing global is at stake.
+    public var canRetryStart: Bool { true }
+
     public func version() async -> String? {
         currentState.canCarryTraffic ? "0.4.8.x (mock)" : nil
     }
